@@ -1,0 +1,38 @@
+services:
+  keycloak:
+    image: ghcr.io/getloom/keycloak-dev:main
+    container_name: keycloak-loom-dev
+    environment:
+      REALM_NAME: loom
+      CLIENT_ID: loom-app
+      CLIENT_SECRET: dev-secret-changeme
+      REDIRECT_URIS: '["http://localhost:5173/auth/keycloak/callback"]'
+      POST_LOGOUT_REDIRECT_URIS: 'http://localhost:5173/signin'
+      DEV_USER_USERNAME: founder
+      DEV_USER_PASSWORD: founder
+      DEV_USER_ROLES: founder
+    ports:
+      - '8080:8080'
+    volumes:
+      - keycloak_data:/var/lib/postgresql
+  postgres-loom:
+    image: postgres:18
+    container_name: postgres-loom-app
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: loom
+    ports:
+      - "5432:5432"
+    volumes:
+      - loom_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loom"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  keycloak_data:
+  loom_data:

@@ -1,0 +1,50 @@
+# Checks and builds the project. For more info:
+# https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Test & Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ['**']
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        node-version: ['24.11']
+
+    # services:
+    #   # Postgres config taken from GitHub Actions help docs:
+    #   # https://help.github.com/en/actions/configuring-and-managing-workflows/creating-postgresql-service-containers
+    #   postgres:
+    #     image: postgres:15
+    #     env:
+    #       POSTGRES_DB: loom
+    #       POSTGRES_PASSWORD: password
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      # - run: npm run db:create
+      #   env:
+      #     POSTGRES_HOST: localhost
+      #     POSTGRES_DB: loom
+      #     POSTGRES_PASSWORD: password
+      #     PGUSER: postgres
+      - run: npx playwright install 
+      - run: npm run test
+      - run: npm run build
