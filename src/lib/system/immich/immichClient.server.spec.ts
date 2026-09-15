@@ -65,4 +65,54 @@ describe('ImmichClient', () => {
 
 		await expect(client.getAlbum('album-1')).rejects.toThrow('network down');
 	});
+
+	describe('getAssetOriginal', () => {
+		it('builds the request with the correct URL and x-api-key header', async () => {
+			const fetchStub = vi
+				.fn()
+				.mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 200 }));
+			vi.stubGlobal('fetch', fetchStub);
+
+			const client = new ImmichClient();
+			await client.getAssetOriginal('asset-1');
+
+			expect(fetchStub).toHaveBeenCalledWith('http://immich.test/api/assets/asset-1/original', {
+				headers: { 'x-api-key': 'test-key' }
+			});
+		});
+
+		it('returns the raw bytes on a 200 response', async () => {
+			const bytes = new Uint8Array([1, 2, 3, 4]);
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(new Response(new Blob([bytes]), { status: 200 }))
+			);
+
+			const client = new ImmichClient();
+			const result = await client.getAssetOriginal('asset-1');
+
+			expect(new Uint8Array(result)).toEqual(bytes);
+		});
+
+		it('throws a descriptive error when the response is non-ok', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }))
+			);
+
+			const client = new ImmichClient();
+
+			await expect(client.getAssetOriginal('missing-asset')).rejects.toThrow(
+				'Immich request failed: 404 Not Found'
+			);
+		});
+
+		it('propagates a network failure when fetch rejects', async () => {
+			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+
+			const client = new ImmichClient();
+
+			await expect(client.getAssetOriginal('asset-1')).rejects.toThrow('network down');
+		});
+	});
 });

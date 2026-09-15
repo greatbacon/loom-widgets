@@ -30,4 +30,16 @@ export class ImmichClient {
 
 		return (await response.json()) as ImmichAlbum;
 	}
+
+	async getAssetOriginal(assetId: string): Promise<ArrayBuffer> {
+		const response = await fetch(`${this.baseUrl}/api/assets/${assetId}/original`, {
+			headers: { 'x-api-key': this.apiKey }
+		});
+
+		if (!response.ok) {
+			throw new Error(`Immich request failed: ${response.status} ${response.statusText}`);
+		}
+
+		return response.arrayBuffer();
+	}
 }

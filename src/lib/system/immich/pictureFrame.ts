@@ -12,3 +12,15 @@ export interface PictureFrameAlbum {
 	albumName: string;
 	assets: PictureFrameAsset[];
 }
+
+export interface PictureFramePushResult {
+	asset: {
+		id: string;
+		filename: string;
+	};
+	device: {
+		width: number;
+		height: number;
+	};
+	path: string;
+}
