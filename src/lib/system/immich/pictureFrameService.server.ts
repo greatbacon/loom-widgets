@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/private';
 import sharp from 'sharp';
 import { ImmichClient } from '$lib/system/immich/immichClient.server';
 import { Bloomin8Client } from '$lib/system/bloomin8/bloomin8Client.server';
+import type { Bloomin8DeviceInfo } from '$lib/system/bloomin8/bloomin8Client.server';
 import type {
 	PictureFrameAlbum,
 	PictureFrameAsset,
@@ -90,6 +91,16 @@ export class PictureFrameService {
 		} catch (error) {
 			log.error('Error pushing image to Bloomin8 frame:', error);
 			return { ok: false, error: 'Failed to push image to Bloomin8 frame', code: 502 };
+		}
+	}
+
+	async getDeviceInfo(): Promise<Result<Bloomin8DeviceInfo> | Error> {
+		try {
+			const device = await this.bloomin8Client.getDeviceInfo();
+			return { ok: true, data: device, code: 200 };
+		} catch (error) {
+			log.error('Error fetching Bloomin8 device info:', error);
+			return { ok: false, error: 'Failed to fetch device info from Bloomin8 frame', code: 502 };
 		}
 	}
 }

@@ -3,6 +3,10 @@ import { env } from '$env/dynamic/private';
 export interface Bloomin8DeviceInfo {
 	width: number;
 	height: number;
+	name: string;
+	version: string;
+	type: string;
+	battery: number;
 }
 
 export interface Bloomin8UploadResponse {

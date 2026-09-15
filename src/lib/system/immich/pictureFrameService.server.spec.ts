@@ -219,4 +219,34 @@ describe('PictureFrameService', () => {
 			expect(immichClient.getAlbum.calledWithExactly('default-album-id')).toBe(true);
 		});
 	});
+
+	describe('getDeviceInfo', () => {
+		it('returns the device info on success', async () => {
+			const deviceInfo = {
+				width: 1200,
+				height: 1600,
+				name: 'Frame',
+				version: '1.2.3',
+				type: 'bloomin8',
+				battery: 87
+			};
+			bloomin8Client.getDeviceInfo.resolves(deviceInfo);
+
+			const result = await service.getDeviceInfo();
+
+			expect(result).toEqual({ ok: true, data: deviceInfo, code: 200 });
+		});
+
+		it('returns a 502 error when the client rejects', async () => {
+			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
+
+			const result = await service.getDeviceInfo();
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to fetch device info from Bloomin8 frame',
+				code: 502
+			});
+		});
+	});
 });
