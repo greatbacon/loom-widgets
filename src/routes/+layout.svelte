@@ -3,9 +3,7 @@
 	import { AppBar, AppLayout, NavItem, settings } from 'svelte-ux';
 	import { page } from '$app/state';
 	import { mdScreen } from '@layerstack/svelte-stores';
-	import IconMdiAlphaACircleOutline from '~icons/mdi/alpha-a-circle-outline';
-	import IconMdiAlphaBCircleOutline from '~icons/mdi/alpha-b-circle-outline';
-	import IconMdiAlphaCCircleOutline from '~icons/mdi/alpha-c-circle-outline';
+	import IconMdiImageFrame from '~icons/mdi/image-frame';
 
 	let { data, children } = $props();
 
@@ -21,24 +19,10 @@
 		<svelte:fragment slot="nav">
 			<NavItem
 				currentUrl={page.url}
-				path="/"
-				text="A -- ALPHA"
+				path="/picture-frame"
+				text="Picture Frame"
 				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
-				icon={IconMdiAlphaACircleOutline}
-			/>
-			<NavItem
-				currentUrl={page.url}
-				path="/"
-				text="B -- BETA"
-				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
-				icon={IconMdiAlphaBCircleOutline}
-			/>
-			<NavItem
-				currentUrl={page.url}
-				path="/"
-				text="C -- CHARLIE"
-				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
-				icon={IconMdiAlphaCCircleOutline}
+				icon={IconMdiImageFrame}
 			/>
 		</svelte:fragment>
 
