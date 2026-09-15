@@ -7,14 +7,20 @@
 	let loading = $state(false);
 	let result = $state<PictureFramePushResult | null>(null);
 	let errorMessage = $state<string | null>(null);
+	let selectedAssetId = $state<string | null>(null);
 
-	async function pushRandomPhoto() {
+	async function pushPhoto(assetId?: string) {
 		loading = true;
 		errorMessage = null;
 		result = null;
 
 		try {
-			const response = await fetch('/picture-frame', { method: 'POST' });
+			const response = await fetch('/picture-frame', {
+				method: 'POST',
+				...(assetId
+					? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId }) }
+					: {})
+			});
 
 			if (!response.ok) {
 				const body = await response.text();
@@ -23,11 +29,16 @@
 			}
 
 			result = await response.json();
+			selectedAssetId = null;
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'Failed to push photo';
 		} finally {
 			loading = false;
 		}
+	}
+
+	function toggleSelect(assetId: string) {
+		selectedAssetId = selectedAssetId === assetId ? null : assetId;
 	}
 </script>
 
@@ -43,9 +54,26 @@
 		<p class="text-error">{data.deviceError}</p>
 	{/if}
 
-	<Button variant="fill" color="primary" {loading} disabled={loading} on:click={pushRandomPhoto}>
-		Push random photo
-	</Button>
+	<div class="flex gap-2">
+		<Button
+			variant="fill"
+			color="primary"
+			{loading}
+			disabled={loading || !selectedAssetId}
+			on:click={() => pushPhoto(selectedAssetId ?? undefined)}
+		>
+			Push selected photo
+		</Button>
+		<Button
+			variant="outline"
+			color="primary"
+			{loading}
+			disabled={loading}
+			on:click={() => pushPhoto()}
+		>
+			Push random photo
+		</Button>
+	</div>
 
 	{#if result}
 		<p>Pushed "{result.asset.filename}" ({result.device.width}x{result.device.height})</p>
@@ -53,5 +81,28 @@
 
 	{#if errorMessage}
 		<p class="text-error">{errorMessage}</p>
+	{/if}
+
+	{#if data.album}
+		<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+			{#each data.album.assets as asset (asset.id)}
+				<button
+					type="button"
+					onclick={() => toggleSelect(asset.id)}
+					class="aspect-square overflow-hidden rounded {selectedAssetId === asset.id
+						? 'ring-4 ring-primary'
+						: ''}"
+				>
+					<img
+						src={asset.thumbnailUrl}
+						alt={asset.filename}
+						loading="lazy"
+						class="h-full w-full object-cover"
+					/>
+				</button>
+			{/each}
+		</div>
+	{:else if data.albumError}
+		<p class="text-error">{data.albumError}</p>
 	{/if}
 </div>

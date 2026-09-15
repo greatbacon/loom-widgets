@@ -41,7 +41,7 @@ export class PictureFrameService {
 				filename: asset.originalFileName,
 				takenAt: asset.fileCreatedAt,
 				type: asset.type,
-				thumbnailUrl: `${baseUrl}/api/assets/${asset.id}/thumbnail`,
+				thumbnailUrl: `/picture-frame/thumbnail/${asset.id}`,
 				originalUrl: `${baseUrl}/api/assets/${asset.id}/original`
 			}));
 
@@ -56,7 +56,20 @@ export class PictureFrameService {
 		}
 	}
 
-	async pushRandomAsset(
+	async getAssetThumbnail(
+		assetId: string
+	): Promise<Result<{ data: ArrayBuffer; contentType: string }> | Error> {
+		try {
+			const thumbnail = await this.immichClient.getAssetThumbnail(assetId);
+			return { ok: true, data: thumbnail, code: 200 };
+		} catch (error) {
+			log.error('Error fetching Immich thumbnail:', error);
+			return { ok: false, error: 'Failed to fetch thumbnail from Immich', code: 502 };
+		}
+	}
+
+	async pushAsset(
+		assetId?: string,
 		albumId: string = env.IMMICH_ALBUM_ID!
 	): Promise<Result<PictureFramePushResult> | Error> {
 		try {
@@ -66,7 +79,16 @@ export class PictureFrameService {
 				return { ok: false, error: 'Album has no assets to push', code: 502 };
 			}
 
-			const asset = album.assets[Math.floor(Math.random() * album.assets.length)];
+			let asset;
+			if (assetId) {
+				asset = album.assets.find((a) => a.id === assetId);
+				if (!asset) {
+					return { ok: false, error: 'Asset not found in album', code: 404 };
+				}
+			} else {
+				asset = album.assets[Math.floor(Math.random() * album.assets.length)];
+			}
+
 			const original = await this.immichClient.getAssetOriginal(asset.id);
 			const device = await this.bloomin8Client.getDeviceInfo();
 

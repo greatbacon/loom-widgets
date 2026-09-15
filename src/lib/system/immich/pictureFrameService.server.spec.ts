@@ -36,14 +36,22 @@ const makeAlbum = (overrides: Partial<ImmichAlbum> = {}): ImmichAlbum => ({
 });
 
 describe('PictureFrameService', () => {
-	let immichClient: { getAlbum: sinon.SinonStub; getAssetOriginal: sinon.SinonStub };
+	let immichClient: {
+		getAlbum: sinon.SinonStub;
+		getAssetOriginal: sinon.SinonStub;
+		getAssetThumbnail: sinon.SinonStub;
+	};
 	let bloomin8Client: { getDeviceInfo: sinon.SinonStub; uploadImage: sinon.SinonStub };
 	let service: InstanceType<typeof PictureFrameService>;
 
 	beforeEach(() => {
 		mockEnv.IMMICH_URL = 'http://immich.test';
 		mockEnv.IMMICH_ALBUM_ID = 'default-album-id';
-		immichClient = { getAlbum: sinon.stub(), getAssetOriginal: sinon.stub() };
+		immichClient = {
+			getAlbum: sinon.stub(),
+			getAssetOriginal: sinon.stub(),
+			getAssetThumbnail: sinon.stub()
+		};
 		bloomin8Client = { getDeviceInfo: sinon.stub(), uploadImage: sinon.stub() };
 		service = new PictureFrameService(
 			immichClient as unknown as ImmichClient,
@@ -68,7 +76,7 @@ describe('PictureFrameService', () => {
 							filename: 'photo.jpg',
 							takenAt: '2026-01-01T00:00:00Z',
 							type: 'IMAGE',
-							thumbnailUrl: 'http://immich.test/api/assets/asset-1/thumbnail',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: 'http://immich.test/api/assets/asset-1/original'
 						}
 					]
@@ -106,17 +114,17 @@ describe('PictureFrameService', () => {
 		});
 	});
 
-	describe('pushRandomAsset', () => {
+	describe('pushAsset', () => {
 		beforeEach(() => {
 			immichClient.getAssetOriginal.resolves(new Uint8Array([1, 2, 3]).buffer);
 			bloomin8Client.getDeviceInfo.resolves({ width: 1200, height: 1600 });
 			bloomin8Client.uploadImage.resolves({ status: 100, path: '/gallerys/default/asset-1.jpg' });
 		});
 
-		it('picks the asset, resizes it to the device resolution, uploads it, and returns the result', async () => {
+		it('picks a random asset, resizes it to the device resolution, uploads it, and returns the result', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(immichClient.getAlbum.calledWithExactly('album-1')).toBe(true);
 			expect(immichClient.getAssetOriginal.calledWithExactly('asset-1')).toBe(true);
@@ -140,7 +148,7 @@ describe('PictureFrameService', () => {
 		it('returns a 502 error without contacting other clients when the album has no assets', async () => {
 			immichClient.getAlbum.resolves(makeAlbum({ assets: [] }));
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(result).toEqual({
 				ok: false,
@@ -155,7 +163,7 @@ describe('PictureFrameService', () => {
 		it('returns a 502 error when getAlbum rejects', async () => {
 			immichClient.getAlbum.rejects(new Error('unreachable'));
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(result).toEqual({
 				ok: false,
@@ -168,7 +176,7 @@ describe('PictureFrameService', () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			immichClient.getAssetOriginal.rejects(new Error('unreachable'));
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(result).toEqual({
 				ok: false,
@@ -181,7 +189,7 @@ describe('PictureFrameService', () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(result).toEqual({
 				ok: false,
@@ -194,7 +202,7 @@ describe('PictureFrameService', () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			bloomin8Client.uploadImage.rejects(new Error('unreachable'));
 
-			const result = await service.pushRandomAsset('album-1');
+			const result = await service.pushAsset(undefined, 'album-1');
 
 			expect(result).toEqual({
 				ok: false,
@@ -206,7 +214,7 @@ describe('PictureFrameService', () => {
 		it('always selects the single asset when the album has only one', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 
-			await service.pushRandomAsset('album-1');
+			await service.pushAsset(undefined, 'album-1');
 
 			expect(immichClient.getAssetOriginal.calledWithExactly('asset-1')).toBe(true);
 		});
@@ -214,9 +222,81 @@ describe('PictureFrameService', () => {
 		it('calls getAlbum with the default IMMICH_ALBUM_ID when no argument is passed', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 
-			await service.pushRandomAsset();
+			await service.pushAsset();
 
 			expect(immichClient.getAlbum.calledWithExactly('default-album-id')).toBe(true);
+		});
+
+		it('pushes the explicitly requested asset without involving random selection', async () => {
+			immichClient.getAlbum.resolves(
+				makeAlbum({
+					assets: [
+						{
+							id: 'asset-1',
+							originalFileName: 'photo.jpg',
+							fileCreatedAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE'
+						},
+						{
+							id: 'asset-2',
+							originalFileName: 'other.jpg',
+							fileCreatedAt: '2026-01-02T00:00:00Z',
+							type: 'IMAGE'
+						}
+					]
+				})
+			);
+
+			const result = await service.pushAsset('asset-2', 'album-1');
+
+			expect(immichClient.getAssetOriginal.calledWithExactly('asset-2')).toBe(true);
+			expect(result).toEqual({
+				ok: true,
+				data: {
+					asset: { id: 'asset-2', filename: 'other.jpg' },
+					device: { width: 1200, height: 1600 },
+					path: '/gallerys/default/asset-1.jpg'
+				},
+				code: 200
+			});
+		});
+
+		it('returns a 404 error without contacting other clients when the asset id is not in the album', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+
+			const result = await service.pushAsset('missing-asset', 'album-1');
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Asset not found in album',
+				code: 404
+			});
+			expect(immichClient.getAssetOriginal.called).toBe(false);
+			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+		});
+	});
+
+	describe('getAssetThumbnail', () => {
+		it('returns the thumbnail data and content type on success', async () => {
+			const thumbnail = { data: new Uint8Array([1, 2, 3]).buffer, contentType: 'image/webp' };
+			immichClient.getAssetThumbnail.resolves(thumbnail);
+
+			const result = await service.getAssetThumbnail('asset-1');
+
+			expect(result).toEqual({ ok: true, data: thumbnail, code: 200 });
+		});
+
+		it('returns a 502 error when the client rejects', async () => {
+			immichClient.getAssetThumbnail.rejects(new Error('unreachable'));
+
+			const result = await service.getAssetThumbnail('asset-1');
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to fetch thumbnail from Immich',
+				code: 502
+			});
 		});
 	});
 
