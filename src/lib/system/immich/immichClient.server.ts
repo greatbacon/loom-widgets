@@ -31,7 +31,7 @@ export class ImmichClient {
 		return (await response.json()) as ImmichAlbum;
 	}
 
-	async getAssetOriginal(assetId: string): Promise<ArrayBuffer> {
+	async getAssetOriginal(assetId: string): Promise<{ data: ArrayBuffer; contentType: string }> {
 		const response = await fetch(`${this.baseUrl}/api/assets/${assetId}/original`, {
 			headers: { 'x-api-key': this.apiKey }
 		});
@@ -40,7 +40,10 @@ export class ImmichClient {
 			throw new Error(`Immich request failed: ${response.status} ${response.statusText}`);
 		}
 
-		return response.arrayBuffer();
+		return {
+			data: await response.arrayBuffer(),
+			contentType: response.headers.get('content-type') ?? 'image/jpeg'
+		};
 	}
 
 	async getAssetThumbnail(assetId: string): Promise<{ data: ArrayBuffer; contentType: string }> {

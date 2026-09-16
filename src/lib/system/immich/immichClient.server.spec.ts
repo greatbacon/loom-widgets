@@ -81,7 +81,26 @@ describe('ImmichClient', () => {
 			});
 		});
 
-		it('returns the raw bytes on a 200 response', async () => {
+		it('returns the raw bytes and content type on a 200 response', async () => {
+			const bytes = new Uint8Array([1, 2, 3, 4]);
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(
+					new Response(new Blob([bytes]), {
+						status: 200,
+						headers: { 'content-type': 'image/webp' }
+					})
+				)
+			);
+
+			const client = new ImmichClient();
+			const result = await client.getAssetOriginal('asset-1');
+
+			expect(new Uint8Array(result.data)).toEqual(bytes);
+			expect(result.contentType).toBe('image/webp');
+		});
+
+		it('defaults content type to image/jpeg when the header is missing', async () => {
 			const bytes = new Uint8Array([1, 2, 3, 4]);
 			vi.stubGlobal(
 				'fetch',
@@ -91,7 +110,7 @@ describe('ImmichClient', () => {
 			const client = new ImmichClient();
 			const result = await client.getAssetOriginal('asset-1');
 
-			expect(new Uint8Array(result)).toEqual(bytes);
+			expect(result.contentType).toBe('image/jpeg');
 		});
 
 		it('throws a descriptive error when the response is non-ok', async () => {

@@ -22,7 +22,21 @@ describe('/picture-frame/+page.svelte', () => {
 				isAuthenticated: true,
 				device: null,
 				deviceError: null,
-				album: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true
+						}
+					]
+				},
 				albumError: null
 			}
 		});
@@ -32,6 +46,34 @@ describe('/picture-frame/+page.svelte', () => {
 
 		expect(fetchStub).toHaveBeenCalledWith('/picture-frame', { method: 'POST' });
 		await expect.element(page.getByText('sunset.jpg')).toBeInTheDocument();
+	});
+
+	it('disables "Push random photo" when no album assets have been processed', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Push random photo' })).toBeDisabled();
 	});
 
 	it('shows device info when data.device is populated', async () => {
@@ -53,7 +95,9 @@ describe('/picture-frame/+page.svelte', () => {
 		});
 
 		await expect.element(page.getByText('Living Room Frame (bloomin8)')).toBeInTheDocument();
-		await expect.element(page.getByText('Firmware 1.2.3 · Battery 87%')).toBeInTheDocument();
+		await expect
+			.element(page.getByText('1200x1600 · Firmware 1.2.3 · Battery 87%'))
+			.toBeInTheDocument();
 	});
 
 	it('shows an inline error when data.deviceError is set', async () => {
@@ -88,7 +132,8 @@ describe('/picture-frame/+page.svelte', () => {
 							takenAt: '2026-01-01T00:00:00Z',
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
-							originalUrl: 'http://immich.test/api/assets/asset-1/original'
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false
 						},
 						{
 							id: 'asset-2',
@@ -96,7 +141,8 @@ describe('/picture-frame/+page.svelte', () => {
 							takenAt: '2026-01-02T00:00:00Z',
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
-							originalUrl: 'http://immich.test/api/assets/asset-2/original'
+							originalUrl: '/picture-frame/original/asset-2',
+							processed: false
 						}
 					]
 				},
@@ -106,9 +152,10 @@ describe('/picture-frame/+page.svelte', () => {
 
 		await expect.element(page.getByAltText('photo.jpg')).toBeInTheDocument();
 		await expect.element(page.getByAltText('other.jpg')).toBeInTheDocument();
+		await expect.element(page.getByTitle('Processed')).not.toBeInTheDocument();
 	});
 
-	it('selecting a thumbnail enables and highlights the "Push selected photo" button', async () => {
+	it('shows a processed indicator only on thumbnails whose asset is processed', async () => {
 		render(Page, {
 			data: {
 				isAuthenticated: true,
@@ -124,7 +171,78 @@ describe('/picture-frame/+page.svelte', () => {
 							takenAt: '2026-01-01T00:00:00Z',
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
-							originalUrl: 'http://immich.test/api/assets/asset-1/original'
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true
+						},
+						{
+							id: 'asset-2',
+							filename: 'other.jpg',
+							takenAt: '2026-01-02T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
+							originalUrl: '/picture-frame/original/asset-2',
+							processed: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await expect.element(page.getByTitle('Processed')).toBeInTheDocument();
+	});
+
+	it('"Push selected photo" stays disabled selecting an unprocessed thumbnail, but highlights it', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		const selectButton = page.getByRole('button', { name: 'Push selected photo' });
+		await expect.element(selectButton).toBeDisabled();
+
+		await page.getByAltText('photo.jpg').click();
+
+		await expect.element(selectButton).toBeDisabled();
+	});
+
+	it('"Push selected photo" becomes enabled once the selected asset is processed', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true
 						}
 					]
 				},
@@ -138,6 +256,44 @@ describe('/picture-frame/+page.svelte', () => {
 		await page.getByAltText('photo.jpg').click();
 
 		await expect.element(selectButton).not.toBeDisabled();
+	});
+
+	it('clicking "Process" on a selected asset opens the crop editor', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: {
+					width: 1200,
+					height: 1600,
+					name: 'Frame',
+					version: '1.0',
+					type: 'bloomin8',
+					battery: 90
+				},
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await page.getByAltText('photo.jpg').click();
+		await page.getByRole('button', { name: 'Process' }).click();
+
+		await expect.element(page.getByText('Crop photo')).toBeInTheDocument();
 	});
 
 	it('clicking "Push selected photo" POSTs the selected assetId', async () => {
@@ -168,7 +324,8 @@ describe('/picture-frame/+page.svelte', () => {
 							takenAt: '2026-01-01T00:00:00Z',
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
-							originalUrl: 'http://immich.test/api/assets/asset-1/original'
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true
 						}
 					]
 				},
