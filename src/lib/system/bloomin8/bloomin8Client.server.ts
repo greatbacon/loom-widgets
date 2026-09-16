@@ -7,6 +7,7 @@ export interface Bloomin8DeviceInfo {
 	version: string;
 	type: string;
 	battery: number;
+	image: string;
 }
 
 export interface Bloomin8UploadResponse {

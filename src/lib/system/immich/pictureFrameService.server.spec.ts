@@ -24,7 +24,7 @@ const sharpInstance = vi.hoisted(() => ({
 
 vi.mock('sharp', () => ({ default: vi.fn(() => sharpInstance) }));
 
-const { PictureFrameService } = await import('./pictureFrameService.server');
+const { PictureFrameService, extractActiveAssetId } = await import('./pictureFrameService.server');
 
 const makeAlbum = (overrides: Partial<ImmichAlbum> = {}): ImmichAlbum => ({
 	id: 'album-1',
@@ -53,6 +53,28 @@ const makeProcessedRow = (overrides: Partial<ProcessedImageRow> = {}): Processed
 	created_at: new Date('2026-01-01T00:00:00Z'),
 	updated_at: null,
 	...overrides
+});
+
+describe('extractActiveAssetId', () => {
+	it('returns null for an empty string', () => {
+		expect(extractActiveAssetId('')).toBeNull();
+	});
+
+	it('extracts the asset id from a full gallery path', () => {
+		expect(extractActiveAssetId('/gallerys/default/asset-1-1700000000000.jpg')).toBe('asset-1');
+	});
+
+	it('correctly splits a UUID-style asset id containing hyphens', () => {
+		expect(
+			extractActiveAssetId(
+				'/gallerys/default/3fa85f64-5717-4562-b3fc-2c963f66afa6-1700000000000.jpg'
+			)
+		).toBe('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+	});
+
+	it('returns null for a filename that does not match the convention', () => {
+		expect(extractActiveAssetId('/gallerys/default/demo.jpg')).toBeNull();
+	});
 });
 
 describe('PictureFrameService', () => {
@@ -543,7 +565,8 @@ describe('PictureFrameService', () => {
 				name: 'Frame',
 				version: '1.2.3',
 				type: 'bloomin8',
-				battery: 87
+				battery: 87,
+				image: '/gallerys/default/asset-1-1700000000000.jpg'
 			};
 			bloomin8Client.getDeviceInfo.resolves(deviceInfo);
 

@@ -12,6 +12,15 @@
 	let result = $state<PictureFramePushResult | null>(null);
 	let errorMessage = $state<string | null>(null);
 	let selectedAssetId = $state<string | null>(null);
+	// Optimistic guess at which asset is now on the frame, set on a successful
+	// push. Reset whenever fresh load data arrives, deferring back to the
+	// server-derived `asset.active` (from the frame's real reported image).
+	let pushedActiveId = $state<string | null>(null);
+
+	$effect(() => {
+		void data;
+		pushedActiveId = null;
+	});
 
 	let selectedAsset = $derived(data.album?.assets.find((a) => a.id === selectedAssetId) ?? null);
 	let hasProcessedAssets = $derived(data.album?.assets.some((a) => a.processed) ?? false);
@@ -35,7 +44,9 @@
 				return;
 			}
 
-			result = await response.json();
+			const pushResult: PictureFramePushResult = await response.json();
+			result = pushResult;
+			pushedActiveId = pushResult.asset.id;
 			selectedAssetId = null;
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'Failed to push photo';
@@ -146,6 +157,13 @@
 						>
 							✓
 						</span>
+					{/if}
+					{#if pushedActiveId ? asset.id === pushedActiveId : asset.active}
+						<span
+							class="pointer-events-none absolute top-0 left-0 h-1/3 w-1/3 bg-success"
+							style="clip-path: polygon(0 0, 100% 0, 0 100%);"
+							title="Currently on frame"
+						></span>
 					{/if}
 				</button>
 			{/each}

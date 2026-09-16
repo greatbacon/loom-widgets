@@ -33,7 +33,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						}
 					]
 				},
@@ -46,6 +47,67 @@ describe('/picture-frame/+page.svelte', () => {
 
 		expect(fetchStub).toHaveBeenCalledWith('/picture-frame', { method: 'POST' });
 		await expect.element(page.getByText('sunset.jpg')).toBeInTheDocument();
+	});
+
+	it('optimistically moves the active badge to the pushed asset without reloading page data', async () => {
+		const fetchStub = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					asset: { id: 'asset-2', filename: 'other.jpg' },
+					device: { width: 1200, height: 1600 },
+					path: '/gallerys/default/asset-2-1700000000000.jpg'
+				}),
+				{ status: 200 }
+			)
+		);
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true,
+							active: true
+						},
+						{
+							id: 'asset-2',
+							filename: 'other.jpg',
+							takenAt: '2026-01-02T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
+							originalUrl: '/picture-frame/original/asset-2',
+							processed: true,
+							active: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await expect.element(page.getByTitle('Currently on frame')).toBeInTheDocument();
+
+		await page.getByAltText('photo.jpg').click();
+		await page.getByRole('button', { name: 'Push selected photo' }).click();
+
+		await expect.element(page.getByText('other.jpg')).toBeInTheDocument();
+		expect(fetchStub).toHaveBeenCalledTimes(1);
+
+		const badgeButton = page.getByTitle('Currently on frame').element().closest('button');
+		const pushedAssetButton = page.getByAltText('other.jpg').element().closest('button');
+		expect(badgeButton).toBe(pushedAssetButton);
 	});
 
 	it('disables "Push random photo" when no album assets have been processed', async () => {
@@ -65,7 +127,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: false
+							processed: false,
+							active: false
 						}
 					]
 				},
@@ -86,7 +149,8 @@ describe('/picture-frame/+page.svelte', () => {
 					name: 'Living Room Frame',
 					version: '1.2.3',
 					type: 'bloomin8',
-					battery: 87
+					battery: 87,
+					image: '/gallerys/default/asset-1-1700000000000.jpg'
 				},
 				deviceError: null,
 				album: null,
@@ -133,7 +197,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: false
+							processed: false,
+							active: false
 						},
 						{
 							id: 'asset-2',
@@ -142,7 +207,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
 							originalUrl: '/picture-frame/original/asset-2',
-							processed: false
+							processed: false,
+							active: false
 						}
 					]
 				},
@@ -172,7 +238,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						},
 						{
 							id: 'asset-2',
@@ -181,7 +248,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
 							originalUrl: '/picture-frame/original/asset-2',
-							processed: false
+							processed: false,
+							active: false
 						}
 					]
 				},
@@ -190,6 +258,45 @@ describe('/picture-frame/+page.svelte', () => {
 		});
 
 		await expect.element(page.getByTitle('Processed')).toBeInTheDocument();
+	});
+
+	it('shows the active badge only on the thumbnail currently on the frame', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true,
+							active: true
+						},
+						{
+							id: 'asset-2',
+							filename: 'other.jpg',
+							takenAt: '2026-01-02T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-2',
+							originalUrl: '/picture-frame/original/asset-2',
+							processed: false,
+							active: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await expect.element(page.getByTitle('Currently on frame')).toBeInTheDocument();
 	});
 
 	it('"Push selected photo" stays disabled selecting an unprocessed thumbnail, but highlights it', async () => {
@@ -209,7 +316,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: false
+							processed: false,
+							active: false
 						}
 					]
 				},
@@ -242,7 +350,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						}
 					]
 				},
@@ -268,7 +377,8 @@ describe('/picture-frame/+page.svelte', () => {
 					name: 'Frame',
 					version: '1.0',
 					type: 'bloomin8',
-					battery: 90
+					battery: 90,
+					image: '/gallerys/default/asset-1-1700000000000.jpg'
 				},
 				deviceError: null,
 				album: {
@@ -282,7 +392,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: false
+							processed: false,
+							active: false
 						}
 					]
 				},
@@ -325,7 +436,8 @@ describe('/picture-frame/+page.svelte', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						}
 					]
 				},

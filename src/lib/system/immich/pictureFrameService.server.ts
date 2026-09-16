@@ -29,6 +29,12 @@ export interface Error {
 
 const log = console;
 
+export function extractActiveAssetId(imagePath: string): string | null {
+	const basename = imagePath.split('/').pop()?.split('?')[0] ?? '';
+	const match = basename.match(/^(.+)-(\d+)\.jpg$/);
+	return match ? match[1] : null;
+}
+
 export class PictureFrameService {
 	constructor(
 		private readonly immichClient: ImmichClient = new ImmichClient(),

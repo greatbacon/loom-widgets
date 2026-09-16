@@ -6,6 +6,7 @@ export interface PictureFrameAsset {
 	thumbnailUrl: string;
 	originalUrl: string;
 	processed: boolean;
+	active?: boolean;
 }
 
 export interface PictureFrameAlbum {
