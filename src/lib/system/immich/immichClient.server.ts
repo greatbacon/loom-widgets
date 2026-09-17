@@ -60,4 +60,19 @@ export class ImmichClient {
 			contentType: response.headers.get('content-type') ?? 'image/jpeg'
 		};
 	}
+
+	async getAssetPreview(assetId: string): Promise<{ data: ArrayBuffer; contentType: string }> {
+		const response = await fetch(`${this.baseUrl}/api/assets/${assetId}/thumbnail?size=preview`, {
+			headers: { 'x-api-key': this.apiKey }
+		});
+
+		if (!response.ok) {
+			throw new Error(`Immich request failed: ${response.status} ${response.statusText}`);
+		}
+
+		return {
+			data: await response.arrayBuffer(),
+			contentType: response.headers.get('content-type') ?? 'image/jpeg'
+		};
+	}
 }

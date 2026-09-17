@@ -206,4 +206,77 @@ describe('ImmichClient', () => {
 			await expect(client.getAssetThumbnail('asset-1')).rejects.toThrow('network down');
 		});
 	});
+
+	describe('getAssetPreview', () => {
+		it('builds the request with the correct URL, size=preview query param, and x-api-key header', async () => {
+			const fetchStub = vi.fn().mockResolvedValue(
+				new Response(new Blob([new Uint8Array([1, 2, 3])]), {
+					status: 200,
+					headers: { 'content-type': 'image/jpeg' }
+				})
+			);
+			vi.stubGlobal('fetch', fetchStub);
+
+			const client = new ImmichClient();
+			await client.getAssetPreview('asset-1');
+
+			expect(fetchStub).toHaveBeenCalledWith(
+				'http://immich.test/api/assets/asset-1/thumbnail?size=preview',
+				{ headers: { 'x-api-key': 'test-key' } }
+			);
+		});
+
+		it('returns the raw bytes and content type on a 200 response', async () => {
+			const bytes = new Uint8Array([1, 2, 3, 4]);
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(
+					new Response(new Blob([bytes]), {
+						status: 200,
+						headers: { 'content-type': 'image/jpeg' }
+					})
+				)
+			);
+
+			const client = new ImmichClient();
+			const result = await client.getAssetPreview('asset-1');
+
+			expect(new Uint8Array(result.data)).toEqual(bytes);
+			expect(result.contentType).toBe('image/jpeg');
+		});
+
+		it('defaults content type to image/jpeg when the header is missing', async () => {
+			const bytes = new Uint8Array([1, 2, 3, 4]);
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(new Response(new Blob([bytes]), { status: 200 }))
+			);
+
+			const client = new ImmichClient();
+			const result = await client.getAssetPreview('asset-1');
+
+			expect(result.contentType).toBe('image/jpeg');
+		});
+
+		it('throws a descriptive error when the response is non-ok', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }))
+			);
+
+			const client = new ImmichClient();
+
+			await expect(client.getAssetPreview('missing-asset')).rejects.toThrow(
+				'Immich request failed: 404 Not Found'
+			);
+		});
+
+		it('propagates a network failure when fetch rejects', async () => {
+			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+
+			const client = new ImmichClient();
+
+			await expect(client.getAssetPreview('asset-1')).rejects.toThrow('network down');
+		});
+	});
 });

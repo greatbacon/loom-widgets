@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import sharp from 'sharp';
+import sharp, { type Metadata } from 'sharp';
 import postgres from 'postgres';
 import { defaultPostgresOptions } from '$lib/db/postgres.server';
 import { ImmichClient } from '$lib/system/immich/immichClient.server';
@@ -35,6 +35,26 @@ export function extractActiveAssetId(imagePath: string): string | null {
 	return match ? match[1] : null;
 }
 
+export function computeDefaultCrop(
+	naturalWidth: number,
+	naturalHeight: number,
+	device: { width: number; height: number }
+): CropRect {
+	const aspectRatio = device.width / device.height;
+	let width = naturalWidth;
+	let height = width / aspectRatio;
+	if (height > naturalHeight) {
+		height = naturalHeight;
+		width = height * aspectRatio;
+	}
+	return {
+		x: Math.round((naturalWidth - width) / 2),
+		y: Math.round((naturalHeight - height) / 2),
+		width: Math.round(width),
+		height: Math.round(height)
+	};
+}
+
 export class PictureFrameService {
 	constructor(
 		private readonly immichClient: ImmichClient = new ImmichClient(),
@@ -51,6 +71,23 @@ export class PictureFrameService {
 		try {
 			const album = await this.immichClient.getAlbum(albumId);
 			const processedAssetIds = new Set(await this.processedImagesRepo.listAssetIds());
+			const unprocessedAssets = album.assets.filter((asset) => !processedAssetIds.has(asset.id));
+
+			if (unprocessedAssets.length > 0) {
+				try {
+					const device = await this.bloomin8Client.getDeviceInfo();
+					for (const asset of unprocessedAssets) {
+						try {
+							await this.autoProcessAsset(asset, device);
+							processedAssetIds.add(asset.id);
+						} catch (error) {
+							log.error(`Best-effort auto-processing failed for asset ${asset.id}:`, error);
+						}
+					}
+				} catch (error) {
+					log.error('Best-effort auto-processing skipped: failed to fetch device info:', error);
+				}
+			}
 
 			const assets: PictureFrameAsset[] = album.assets.map((asset) => ({
 				id: asset.id,
@@ -97,6 +134,76 @@ export class PictureFrameService {
 		}
 	}
 
+	private async fetchOriginalWithNaturalDimensions(
+		assetId: string
+	): Promise<{ originalBuffer: Buffer; naturalWidth: number; naturalHeight: number }> {
+		const original = await this.immichClient.getAssetOriginal(assetId);
+		let originalBuffer = Buffer.from(original.data);
+		let metadata: Metadata;
+		try {
+			metadata = await sharp(originalBuffer).metadata();
+		} catch {
+			// sharp/libvips can't decode this original directly - camera RAW formats
+			// (e.g. .arw, .cr2, .nef) aren't supported input formats. Immich already
+			// decodes RAW originals into a JPEG preview for its own gallery, so fall
+			// back to that instead of failing the whole asset.
+			const preview = await this.immichClient.getAssetPreview(assetId);
+			originalBuffer = Buffer.from(preview.data);
+			metadata = await sharp(originalBuffer).metadata();
+		}
+		// EXIF orientations 5-8 mean the stored raster is rotated 90/270 degrees
+		// relative to how it's displayed (and how the browser reports naturalWidth/
+		// naturalHeight, which is what crop rects are expressed in).
+		const isSideways = (metadata.orientation ?? 1) >= 5;
+		const naturalWidth = (isSideways ? metadata.height : metadata.width) ?? 0;
+		const naturalHeight = (isSideways ? metadata.width : metadata.height) ?? 0;
+		return { originalBuffer, naturalWidth, naturalHeight };
+	}
+
+	private async cropResizeAndPersist(
+		asset: { id: string; originalFileName: string },
+		crop: CropRect,
+		device: { width: number; height: number },
+		originalBuffer: Buffer
+	): Promise<PictureFrameProcessResult> {
+		const jpeg = await sharp(originalBuffer)
+			.rotate()
+			.extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+			.resize(device.width, device.height)
+			.jpeg()
+			.toBuffer();
+
+		const filePath = await this.imageStorage.write(asset.id, jpeg);
+
+		await this.processedImagesRepo.upsert(
+			asset.id,
+			asset.originalFileName,
+			crop.x,
+			crop.y,
+			crop.width,
+			crop.height,
+			device.width,
+			device.height,
+			filePath
+		);
+
+		return {
+			asset: { id: asset.id, filename: asset.originalFileName },
+			crop,
+			device: { width: device.width, height: device.height }
+		};
+	}
+
+	private async autoProcessAsset(
+		asset: { id: string; originalFileName: string },
+		device: { width: number; height: number }
+	): Promise<void> {
+		const { originalBuffer, naturalWidth, naturalHeight } =
+			await this.fetchOriginalWithNaturalDimensions(asset.id);
+		const crop = computeDefaultCrop(naturalWidth, naturalHeight, device);
+		await this.cropResizeAndPersist(asset, crop, device, originalBuffer);
+	}
+
 	async processAsset(
 		assetId: string,
 		crop: CropRect,
@@ -113,15 +220,8 @@ export class PictureFrameService {
 				return { ok: false, error: 'Invalid crop dimensions', code: 400 };
 			}
 
-			const original = await this.immichClient.getAssetOriginal(asset.id);
-			const originalBuffer = Buffer.from(original.data);
-			const metadata = await sharp(originalBuffer).metadata();
-			// EXIF orientations 5-8 mean the stored raster is rotated 90/270 degrees
-			// relative to how it's displayed (and how the browser reports naturalWidth/
-			// naturalHeight, which is what the crop rect below is expressed in).
-			const isSideways = (metadata.orientation ?? 1) >= 5;
-			const naturalWidth = (isSideways ? metadata.height : metadata.width) ?? 0;
-			const naturalHeight = (isSideways ? metadata.width : metadata.height) ?? 0;
+			const { originalBuffer, naturalWidth, naturalHeight } =
+				await this.fetchOriginalWithNaturalDimensions(asset.id);
 
 			if (
 				crop.x < 0 ||
@@ -133,37 +233,9 @@ export class PictureFrameService {
 			}
 
 			const device = await this.bloomin8Client.getDeviceInfo();
+			const data = await this.cropResizeAndPersist(asset, crop, device, originalBuffer);
 
-			const jpeg = await sharp(originalBuffer)
-				.rotate()
-				.extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
-				.resize(device.width, device.height)
-				.jpeg()
-				.toBuffer();
-
-			const filePath = await this.imageStorage.write(asset.id, jpeg);
-
-			await this.processedImagesRepo.upsert(
-				asset.id,
-				asset.originalFileName,
-				crop.x,
-				crop.y,
-				crop.width,
-				crop.height,
-				device.width,
-				device.height,
-				filePath
-			);
-
-			return {
-				ok: true,
-				data: {
-					asset: { id: asset.id, filename: asset.originalFileName },
-					crop,
-					device: { width: device.width, height: device.height }
-				},
-				code: 200
-			};
+			return { ok: true, data, code: 200 };
 		} catch (error) {
 			log.error('Error processing image for picture frame:', error);
 			return { ok: false, error: 'Failed to process image', code: 502 };

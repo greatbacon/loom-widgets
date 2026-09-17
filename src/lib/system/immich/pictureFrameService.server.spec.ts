@@ -24,7 +24,9 @@ const sharpInstance = vi.hoisted(() => ({
 
 vi.mock('sharp', () => ({ default: vi.fn(() => sharpInstance) }));
 
-const { PictureFrameService, extractActiveAssetId } = await import('./pictureFrameService.server');
+const { PictureFrameService, extractActiveAssetId, computeDefaultCrop } = await import(
+	'./pictureFrameService.server'
+);
 
 const makeAlbum = (overrides: Partial<ImmichAlbum> = {}): ImmichAlbum => ({
 	id: 'album-1',
@@ -82,6 +84,7 @@ describe('PictureFrameService', () => {
 		getAlbum: sinon.SinonStub;
 		getAssetOriginal: sinon.SinonStub;
 		getAssetThumbnail: sinon.SinonStub;
+		getAssetPreview: sinon.SinonStub;
 	};
 	let bloomin8Client: { getDeviceInfo: sinon.SinonStub; uploadImage: sinon.SinonStub };
 	let processedImagesRepo: {
@@ -105,7 +108,8 @@ describe('PictureFrameService', () => {
 		immichClient = {
 			getAlbum: sinon.stub(),
 			getAssetOriginal: sinon.stub(),
-			getAssetThumbnail: sinon.stub()
+			getAssetThumbnail: sinon.stub(),
+			getAssetPreview: sinon.stub()
 		};
 		bloomin8Client = { getDeviceInfo: sinon.stub(), uploadImage: sinon.stub() };
 		processedImagesRepo = {
@@ -126,7 +130,7 @@ describe('PictureFrameService', () => {
 	describe('getAlbumContents', () => {
 		it('maps a successful getAlbum response into the expected shape', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
-			processedImagesRepo.listAssetIds.resolves([]);
+			processedImagesRepo.listAssetIds.resolves(['asset-1']);
 
 			const result = await service.getAlbumContents('album-1');
 
@@ -143,7 +147,7 @@ describe('PictureFrameService', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: false
+							processed: true
 						}
 					]
 				},
@@ -192,6 +196,7 @@ describe('PictureFrameService', () => {
 
 		it('calls client.getAlbum with the default IMMICH_ALBUM_ID when no argument is passed', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves(['asset-1']);
 
 			await service.getAlbumContents();
 
@@ -200,10 +205,137 @@ describe('PictureFrameService', () => {
 
 		it('calls client.getAlbum with an explicit argument when one is passed', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves(['asset-1']);
 
 			await service.getAlbumContents('explicit-album-id');
 
 			expect(immichClient.getAlbum.calledWithExactly('explicit-album-id')).toBe(true);
+		});
+	});
+
+	describe('getAlbumContents auto-processing', () => {
+		beforeEach(() => {
+			bloomin8Client.getDeviceInfo.resolves({ width: 1200, height: 1600 });
+			immichClient.getAssetOriginal.resolves({
+				data: new Uint8Array([1, 2, 3]).buffer,
+				contentType: 'image/jpeg'
+			});
+			imageStorage.write.resolves('data/processed/asset-1.jpg');
+			processedImagesRepo.upsert.resolves(makeProcessedRow());
+		});
+
+		it('auto-processes an unprocessed asset with a computed centered crop before returning', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves([]);
+			sharpInstance.metadata.mockResolvedValue({ width: 4000, height: 3000 });
+
+			const result = await service.getAlbumContents('album-1');
+
+			expect(bloomin8Client.getDeviceInfo.called).toBe(true);
+			// device aspect ratio 1200/1600 = 0.75; natural 4000x3000 -> width-limited,
+			// height = 4000/0.75 = 5333.., exceeds 3000, so height-limited instead:
+			// height = 3000, width = 3000*0.75 = 2250, centered.
+			expect(sharpInstance.extract).toHaveBeenCalledWith({
+				left: 875,
+				top: 0,
+				width: 2250,
+				height: 3000
+			});
+			expect(imageStorage.write.calledWithExactly('asset-1', Buffer.from('jpeg-bytes'))).toBe(true);
+			expect(processedImagesRepo.upsert.called).toBe(true);
+			expect(result).toMatchObject({
+				ok: true,
+				data: { assets: [expect.objectContaining({ id: 'asset-1', processed: true })] }
+			});
+		});
+
+		it('does not fetch device info or attempt processing when no assets are unprocessed', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves(['asset-1']);
+
+			await service.getAlbumContents('album-1');
+
+			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
+			expect(immichClient.getAssetOriginal.called).toBe(false);
+		});
+
+		it('continues auto-processing remaining assets when one fails, and still returns ok', async () => {
+			immichClient.getAlbum.resolves(
+				makeAlbum({
+					assets: [
+						{
+							id: 'asset-1',
+							originalFileName: 'a.jpg',
+							fileCreatedAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE'
+						},
+						{
+							id: 'asset-2',
+							originalFileName: 'b.jpg',
+							fileCreatedAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE'
+						}
+					]
+				})
+			);
+			processedImagesRepo.listAssetIds.resolves([]);
+			immichClient.getAssetOriginal
+				.withArgs('asset-1')
+				.rejects(new Error('unreachable'))
+				.withArgs('asset-2')
+				.resolves({ data: new Uint8Array([1, 2, 3]).buffer, contentType: 'image/jpeg' });
+
+			const result = await service.getAlbumContents('album-1');
+
+			expect(result).toMatchObject({
+				ok: true,
+				data: {
+					assets: [
+						expect.objectContaining({ id: 'asset-1', processed: false }),
+						expect.objectContaining({ id: 'asset-2', processed: true })
+					]
+				}
+			});
+		});
+
+		it('returns the album with all assets unprocessed, without erroring, when device info fetch fails', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves([]);
+			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
+
+			const result = await service.getAlbumContents('album-1');
+
+			expect(immichClient.getAssetOriginal.called).toBe(false);
+			expect(result).toMatchObject({
+				ok: true,
+				data: { assets: [expect.objectContaining({ id: 'asset-1', processed: false })] }
+			});
+		});
+	});
+
+	describe('computeDefaultCrop', () => {
+		it('crops to the full image height, centering horizontally, when the image is proportionally wider than the device', () => {
+			// device aspect ratio 0.75; image 4000x3000 (aspect ~1.33) is proportionally wider,
+			// so a full-width crop (height = 4000/0.75 = 5333.33) would overflow the natural
+			// height (3000) -> falls back to full height instead: height = 3000, width = 2250.
+			const crop = computeDefaultCrop(4000, 3000, { width: 1200, height: 1600 });
+
+			expect(crop).toEqual({ x: 875, y: 0, width: 2250, height: 3000 });
+		});
+
+		it('crops to the full image width, centering vertically, when the image is proportionally narrower than the device', () => {
+			// device aspect ratio 0.75; image 2000x4000 (aspect 0.5) is proportionally narrower,
+			// so a full-width crop (height = 2000/0.75 = 2666.67) fits within the natural
+			// height (4000) -> uses the full width: width = 2000, height = 2667 (rounded).
+			const crop = computeDefaultCrop(2000, 4000, { width: 1200, height: 1600 });
+
+			expect(crop).toEqual({ x: 0, y: 667, width: 2000, height: 2667 });
+		});
+
+		it('returns the full image as the crop when its aspect ratio exactly matches the device', () => {
+			const crop = computeDefaultCrop(1200, 1600, { width: 1200, height: 1600 });
+
+			expect(crop).toEqual({ x: 0, y: 0, width: 1200, height: 1600 });
 		});
 	});
 
@@ -257,6 +389,41 @@ describe('PictureFrameService', () => {
 				},
 				code: 200
 			});
+		});
+
+		it('falls back to the Immich preview when sharp cannot decode the original (e.g. a RAW format)', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			immichClient.getAssetPreview.resolves({
+				data: new Uint8Array([4, 5, 6]).buffer,
+				contentType: 'image/jpeg'
+			});
+			sharpInstance.metadata
+				.mockRejectedValueOnce(new Error('Input buffer contains unsupported image format'))
+				.mockResolvedValueOnce({ width: 3000, height: 3000 });
+
+			const result = await service.processAsset('asset-1', crop, 'album-1');
+
+			expect(immichClient.getAssetPreview.calledWithExactly('asset-1')).toBe(true);
+			expect(sharpInstance.extract).toHaveBeenCalledWith({
+				left: 0,
+				top: 0,
+				width: 3000,
+				height: 3000
+			});
+			expect(result).toMatchObject({ ok: true });
+		});
+
+		it('returns a 502 error when the Immich preview fallback also fails to decode', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			immichClient.getAssetPreview.resolves({
+				data: new Uint8Array([4, 5, 6]).buffer,
+				contentType: 'image/jpeg'
+			});
+			sharpInstance.metadata.mockRejectedValue(new Error('unsupported image format'));
+
+			const result = await service.processAsset('asset-1', crop, 'album-1');
+
+			expect(result).toEqual({ ok: false, error: 'Failed to process image', code: 502 });
 		});
 
 		it('validates the crop against display (rotated) dimensions when EXIF orientation is sideways', async () => {
