@@ -53,3 +53,8 @@ export interface PictureFrameProcessResult {
 	crop: CropRect;
 	device: { width: number; height: number };
 }
+
+export interface PictureFrameBatchResult {
+	processedCount: number;
+	failedCount: number;
+}

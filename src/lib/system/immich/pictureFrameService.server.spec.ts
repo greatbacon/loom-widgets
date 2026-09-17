@@ -211,9 +211,25 @@ describe('PictureFrameService', () => {
 
 			expect(immichClient.getAlbum.calledWithExactly('explicit-album-id')).toBe(true);
 		});
+
+		it('performs no writes when unprocessed assets exist', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves([]);
+
+			const result = await service.getAlbumContents('album-1');
+
+			expect(immichClient.getAssetOriginal.called).toBe(false);
+			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
+			expect(imageStorage.write.called).toBe(false);
+			expect(processedImagesRepo.upsert.called).toBe(false);
+			expect(result).toMatchObject({
+				ok: true,
+				data: { assets: [expect.objectContaining({ id: 'asset-1', processed: false })] }
+			});
+		});
 	});
 
-	describe('getAlbumContents auto-processing', () => {
+	describe('processUnprocessedAssets', () => {
 		beforeEach(() => {
 			bloomin8Client.getDeviceInfo.resolves({ width: 1200, height: 1600 });
 			immichClient.getAssetOriginal.resolves({
@@ -224,12 +240,12 @@ describe('PictureFrameService', () => {
 			processedImagesRepo.upsert.resolves(makeProcessedRow());
 		});
 
-		it('auto-processes an unprocessed asset with a computed centered crop before returning', async () => {
+		it('auto-processes an unprocessed asset with a computed centered crop and returns incremented counts', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			processedImagesRepo.listAssetIds.resolves([]);
 			sharpInstance.metadata.mockResolvedValue({ width: 4000, height: 3000 });
 
-			const result = await service.getAlbumContents('album-1');
+			const result = await service.processUnprocessedAssets('album-1');
 
 			expect(bloomin8Client.getDeviceInfo.called).toBe(true);
 			// device aspect ratio 1200/1600 = 0.75; natural 4000x3000 -> width-limited,
@@ -243,23 +259,21 @@ describe('PictureFrameService', () => {
 			});
 			expect(imageStorage.write.calledWithExactly('asset-1', Buffer.from('jpeg-bytes'))).toBe(true);
 			expect(processedImagesRepo.upsert.called).toBe(true);
-			expect(result).toMatchObject({
-				ok: true,
-				data: { assets: [expect.objectContaining({ id: 'asset-1', processed: true })] }
-			});
+			expect(result).toEqual({ ok: true, data: { processedCount: 1, failedCount: 0 }, code: 200 });
 		});
 
 		it('does not fetch device info or attempt processing when no assets are unprocessed', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			processedImagesRepo.listAssetIds.resolves(['asset-1']);
 
-			await service.getAlbumContents('album-1');
+			const result = await service.processUnprocessedAssets('album-1');
 
 			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
 			expect(immichClient.getAssetOriginal.called).toBe(false);
+			expect(result).toEqual({ ok: true, data: { processedCount: 0, failedCount: 0 }, code: 200 });
 		});
 
-		it('continues auto-processing remaining assets when one fails, and still returns ok', async () => {
+		it('continues auto-processing remaining assets when one fails, counting successes and failures', async () => {
 			immichClient.getAlbum.resolves(
 				makeAlbum({
 					assets: [
@@ -285,30 +299,31 @@ describe('PictureFrameService', () => {
 				.withArgs('asset-2')
 				.resolves({ data: new Uint8Array([1, 2, 3]).buffer, contentType: 'image/jpeg' });
 
-			const result = await service.getAlbumContents('album-1');
+			const result = await service.processUnprocessedAssets('album-1');
 
-			expect(result).toMatchObject({
-				ok: true,
-				data: {
-					assets: [
-						expect.objectContaining({ id: 'asset-1', processed: false }),
-						expect.objectContaining({ id: 'asset-2', processed: true })
-					]
-				}
-			});
+			expect(result).toEqual({ ok: true, data: { processedCount: 1, failedCount: 1 }, code: 200 });
 		});
 
-		it('returns the album with all assets unprocessed, without erroring, when device info fetch fails', async () => {
+		it('returns zero counts without attempting any processing when device info fetch fails', async () => {
 			immichClient.getAlbum.resolves(makeAlbum());
 			processedImagesRepo.listAssetIds.resolves([]);
 			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
 
-			const result = await service.getAlbumContents('album-1');
+			const result = await service.processUnprocessedAssets('album-1');
 
 			expect(immichClient.getAssetOriginal.called).toBe(false);
-			expect(result).toMatchObject({
-				ok: true,
-				data: { assets: [expect.objectContaining({ id: 'asset-1', processed: false })] }
+			expect(result).toEqual({ ok: true, data: { processedCount: 0, failedCount: 0 }, code: 200 });
+		});
+
+		it('returns a 502 error when getAlbum rejects', async () => {
+			immichClient.getAlbum.rejects(new Error('unreachable'));
+
+			const result = await service.processUnprocessedAssets('album-1');
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to auto-process album assets',
+				code: 502
 			});
 		});
 	});

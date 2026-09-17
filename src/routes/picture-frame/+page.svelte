@@ -24,6 +24,8 @@
 
 	let selectedAsset = $derived(data.album?.assets.find((a) => a.id === selectedAssetId) ?? null);
 	let hasProcessedAssets = $derived(data.album?.assets.some((a) => a.processed) ?? false);
+	let hasUnprocessedAssets = $derived(data.album?.assets.some((a) => !a.processed) ?? false);
+	let autoProcessing = $state(false);
 
 	async function pushPhoto(assetId?: string) {
 		loading = true;
@@ -79,6 +81,21 @@
 			processing = false;
 		}
 	}
+
+	async function processNewPhotos() {
+		autoProcessing = true;
+		errorMessage = null;
+		try {
+			const response = await fetch('/picture-frame/process-all', { method: 'POST' });
+			if (!response.ok) {
+				errorMessage = (await response.text()) || `Request failed with status ${response.status}`;
+				return;
+			}
+			await invalidateAll();
+		} finally {
+			autoProcessing = false;
+		}
+	}
 </script>
 
 <div class="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
@@ -123,6 +140,15 @@
 			on:click={() => (showCropEditor = true)}
 		>
 			Process
+		</Button>
+		<Button
+			variant="outline"
+			color="secondary"
+			loading={autoProcessing}
+			disabled={loading || processing || autoProcessing || !hasUnprocessedAssets}
+			on:click={processNewPhotos}
+		>
+			Process new photos
 		</Button>
 	</div>
 

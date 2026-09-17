@@ -12,7 +12,8 @@ import type {
 	PictureFrameAlbum,
 	PictureFrameAsset,
 	PictureFramePushResult,
-	PictureFrameProcessResult
+	PictureFrameProcessResult,
+	PictureFrameBatchResult
 } from '$lib/system/immich/pictureFrame';
 
 export interface Result<T> {
@@ -71,23 +72,6 @@ export class PictureFrameService {
 		try {
 			const album = await this.immichClient.getAlbum(albumId);
 			const processedAssetIds = new Set(await this.processedImagesRepo.listAssetIds());
-			const unprocessedAssets = album.assets.filter((asset) => !processedAssetIds.has(asset.id));
-
-			if (unprocessedAssets.length > 0) {
-				try {
-					const device = await this.bloomin8Client.getDeviceInfo();
-					for (const asset of unprocessedAssets) {
-						try {
-							await this.autoProcessAsset(asset, device);
-							processedAssetIds.add(asset.id);
-						} catch (error) {
-							log.error(`Best-effort auto-processing failed for asset ${asset.id}:`, error);
-						}
-					}
-				} catch (error) {
-					log.error('Best-effort auto-processing skipped: failed to fetch device info:', error);
-				}
-			}
 
 			const assets: PictureFrameAsset[] = album.assets.map((asset) => ({
 				id: asset.id,
@@ -107,6 +91,45 @@ export class PictureFrameService {
 		} catch (error) {
 			log.error('Error fetching Immich album:', error);
 			return { ok: false, error: 'Failed to fetch album from Immich', code: 502 };
+		}
+	}
+
+	async processUnprocessedAssets(
+		albumId: string = env.IMMICH_ALBUM_ID!
+	): Promise<Result<PictureFrameBatchResult> | Error> {
+		try {
+			const album = await this.immichClient.getAlbum(albumId);
+			const processedAssetIds = new Set(await this.processedImagesRepo.listAssetIds());
+			const unprocessedAssets = album.assets.filter((asset) => !processedAssetIds.has(asset.id));
+
+			if (unprocessedAssets.length === 0) {
+				return { ok: true, data: { processedCount: 0, failedCount: 0 }, code: 200 };
+			}
+
+			let device: Bloomin8DeviceInfo;
+			try {
+				device = await this.bloomin8Client.getDeviceInfo();
+			} catch (error) {
+				log.error('Best-effort auto-processing skipped: failed to fetch device info:', error);
+				return { ok: true, data: { processedCount: 0, failedCount: 0 }, code: 200 };
+			}
+
+			let processedCount = 0;
+			let failedCount = 0;
+			for (const asset of unprocessedAssets) {
+				try {
+					await this.autoProcessAsset(asset, device);
+					processedCount++;
+				} catch (error) {
+					log.error(`Best-effort auto-processing failed for asset ${asset.id}:`, error);
+					failedCount++;
+				}
+			}
+
+			return { ok: true, data: { processedCount, failedCount }, code: 200 };
+		} catch (error) {
+			log.error('Error auto-processing album assets:', error);
+			return { ok: false, error: 'Failed to auto-process album assets', code: 502 };
 		}
 	}
 

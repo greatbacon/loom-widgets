@@ -1,7 +1,12 @@
-import { redirect, type Handle } from '@sveltejs/kit';
+import { redirect, type Handle, type ServerInit } from '@sveltejs/kit';
 import { resolveSession } from '$lib/system/auth/requestAuth.server';
+import { startNightlyPictureFrameScheduler } from '$lib/system/immich/scheduler.server';
 
 const publicRoutes = ['/signin', '/auth/keycloak/login', '/auth/keycloak/callback', '/auth/logout'];
+
+export const init: ServerInit = () => {
+	startNightlyPictureFrameScheduler();
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { keycloakSubject, roles } = await resolveSession(event.cookies);

@@ -49,6 +49,7 @@
 		"vitest-browser-svelte": "^2.0.1"
 	},
 	"dependencies": {
+		"croner": "^10.0.1",
 		"db-migrate": "^0.11.14",
 		"jose": "^6.2.9",
 		"ley": "^0.8.1",

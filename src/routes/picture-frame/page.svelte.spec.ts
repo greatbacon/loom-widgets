@@ -402,7 +402,7 @@ describe('/picture-frame/+page.svelte', () => {
 		});
 
 		await page.getByAltText('photo.jpg').click();
-		await page.getByRole('button', { name: 'Process' }).click();
+		await page.getByRole('button', { name: 'Process', exact: true }).click();
 
 		await expect.element(page.getByText('Crop photo')).toBeInTheDocument();
 	});
@@ -453,6 +453,107 @@ describe('/picture-frame/+page.svelte', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ assetId: 'asset-1' })
 		});
+	});
+
+	it('disables "Process new photos" when every visible asset is already processed', async () => {
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: true,
+							active: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Process new photos' })).toBeDisabled();
+	});
+
+	it('clicking "Process new photos" POSTs to process-all and refreshes the data', async () => {
+		const fetchStub = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false,
+							active: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		const button = page.getByRole('button', { name: 'Process new photos' });
+		await expect.element(button).not.toBeDisabled();
+		await button.click();
+
+		expect(fetchStub).toHaveBeenCalledWith('/picture-frame/process-all', { method: 'POST' });
+	});
+
+	it('shows an inline error when "Process new photos" fails', async () => {
+		const fetchStub = vi
+			.fn()
+			.mockResolvedValue(new Response('Failed to auto-process album assets', { status: 502 }));
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: {
+					albumId: 'album-1',
+					albumName: 'Trip',
+					assets: [
+						{
+							id: 'asset-1',
+							filename: 'photo.jpg',
+							takenAt: '2026-01-01T00:00:00Z',
+							type: 'IMAGE',
+							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
+							originalUrl: '/picture-frame/original/asset-1',
+							processed: false,
+							active: false
+						}
+					]
+				},
+				albumError: null
+			}
+		});
+
+		await page.getByRole('button', { name: 'Process new photos' }).click();
+
+		await expect.element(page.getByText('Failed to auto-process album assets')).toBeInTheDocument();
 	});
 
 	it('shows data.albumError when data.album is null and albumError is set', async () => {
