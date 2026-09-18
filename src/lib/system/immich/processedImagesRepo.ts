@@ -36,7 +36,7 @@ export class ProcessedImagesRepo extends Repo {
 			    file_path = EXCLUDED.file_path,
 			    updated_at = now()
 			RETURNING asset_id, filename, crop_x, crop_y, crop_width, crop_height,
-			          device_width, device_height, file_path, created_at, updated_at
+			          device_width, device_height, file_path, created_at, updated_at, active
 		`;
 		return data[0];
 	}
@@ -44,7 +44,7 @@ export class ProcessedImagesRepo extends Repo {
 	async findByAssetId(assetId: string): Promise<ProcessedImageRow | undefined> {
 		const data = await this.sql<ProcessedImageRow[]>`
 			SELECT asset_id, filename, crop_x, crop_y, crop_width, crop_height,
-			       device_width, device_height, file_path, created_at, updated_at
+			       device_width, device_height, file_path, created_at, updated_at, active
 			FROM processed_images
 			WHERE asset_id = ${assetId}
 		`;
@@ -54,7 +54,7 @@ export class ProcessedImagesRepo extends Repo {
 	async listAll(): Promise<ProcessedImageRow[]> {
 		return this.sql<ProcessedImageRow[]>`
 			SELECT asset_id, filename, crop_x, crop_y, crop_width, crop_height,
-			       device_width, device_height, file_path, created_at, updated_at
+			       device_width, device_height, file_path, created_at, updated_at, active
 			FROM processed_images
 			ORDER BY asset_id
 		`;
@@ -65,5 +65,28 @@ export class ProcessedImagesRepo extends Repo {
 			SELECT asset_id FROM processed_images
 		`;
 		return data.map((row) => row.asset_id);
+	}
+
+	async findActiveAssetId(): Promise<string | null> {
+		const data = await this.sql<{ asset_id: string }[]>`
+			SELECT asset_id FROM processed_images WHERE active = true LIMIT 1
+		`;
+		return data[0]?.asset_id ?? null;
+	}
+
+	async setActive(assetId: string): Promise<void> {
+		// Postgres checks the non-deferrable partial unique index on `active` per
+		// row within a statement, not at end-of-statement, so a single UPDATE that
+		// swaps the flag between two rows can transiently violate it depending on
+		// row processing order. Clearing the old row before setting the new one,
+		// as separate statements in a transaction, avoids that intermediate state.
+		await this.sql.begin(async (sql) => {
+			await sql`
+				UPDATE processed_images SET active = false WHERE active = true AND asset_id != ${assetId}
+			`;
+			await sql`
+				UPDATE processed_images SET active = true WHERE asset_id = ${assetId}
+			`;
+		});
 	}
 }

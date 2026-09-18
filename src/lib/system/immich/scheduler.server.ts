@@ -28,7 +28,7 @@ export async function runNightlyPictureFrameBatch(): Promise<void> {
 			return;
 		}
 
-		log.debug(`Nightly picture-frame cycle: ${cycleResult.data.status}`);
+		log.debug(`Nightly picture-frame cycle: pushed asset ${cycleResult.data.asset.id}`);
 	} finally {
 		await sql.end();
 	}

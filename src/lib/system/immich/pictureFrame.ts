@@ -6,7 +6,7 @@ export interface PictureFrameAsset {
 	thumbnailUrl: string;
 	originalUrl: string;
 	processed: boolean;
-	active?: boolean;
+	active: boolean;
 }
 
 export interface PictureFrameAlbum {
@@ -25,12 +25,6 @@ export interface PictureFramePushResult {
 		height: number;
 	};
 	path: string;
-}
-
-export interface PictureFrameCycleResult {
-	status: 'pushed' | 'skipped';
-	reason?: string;
-	push?: PictureFramePushResult;
 }
 
 export interface CropRect {
@@ -52,6 +46,7 @@ export interface ProcessedImageRow {
 	file_path: string;
 	created_at: Date;
 	updated_at: Date | null;
+	active: boolean;
 }
 
 export interface PictureFrameProcessResult {

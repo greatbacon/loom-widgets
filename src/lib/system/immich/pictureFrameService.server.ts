@@ -11,7 +11,6 @@ import type {
 	CropRect,
 	PictureFrameAlbum,
 	PictureFrameAsset,
-	PictureFrameCycleResult,
 	PictureFramePushResult,
 	PictureFrameProcessResult,
 	PictureFrameBatchResult,
@@ -31,12 +30,6 @@ export interface Error {
 }
 
 const log = console;
-
-export function extractActiveAssetId(imagePath: string): string | null {
-	const basename = imagePath.split('/').pop()?.split('?')[0] ?? '';
-	const match = basename.match(/^(.+)-(\d+)\.jpg$/);
-	return match ? match[1] : null;
-}
 
 export function computeDefaultCrop(
 	naturalWidth: number,
@@ -73,7 +66,10 @@ export class PictureFrameService {
 	): Promise<Result<PictureFrameAlbum> | Error> {
 		try {
 			const album = await this.immichClient.getAlbum(albumId);
-			const processedAssetIds = new Set(await this.processedImagesRepo.listAssetIds());
+			const [processedAssetIds, activeAssetId] = await Promise.all([
+				this.processedImagesRepo.listAssetIds().then((ids) => new Set(ids)),
+				this.processedImagesRepo.findActiveAssetId()
+			]);
 
 			const assets: PictureFrameAsset[] = album.assets
 				.map((asset) => ({
@@ -83,7 +79,8 @@ export class PictureFrameService {
 					type: asset.type,
 					thumbnailUrl: `/picture-frame/thumbnail/${asset.id}`,
 					originalUrl: `/picture-frame/original/${asset.id}`,
-					processed: processedAssetIds.has(asset.id)
+					processed: processedAssetIds.has(asset.id),
+					active: asset.id === activeAssetId
 				}))
 				.sort((a, b) => a.id.localeCompare(b.id));
 
@@ -293,45 +290,21 @@ export class PictureFrameService {
 		}
 	}
 
-	async cycleActiveAsset(): Promise<Result<PictureFrameCycleResult> | Error> {
+	async cycleActiveAsset(): Promise<Result<PictureFramePushResult> | Error> {
 		try {
 			const candidates = await this.processedImagesRepo.listAll();
 			if (candidates.length === 0) {
 				return { ok: false, error: 'No processed assets available to cycle', code: 409 };
 			}
 
-			let device: Bloomin8DeviceInfo;
-			try {
-				device = await this.bloomin8Client.getDeviceInfo();
-			} catch (error) {
-				log.error('Cycle skipped: failed to fetch device info:', error);
-				return {
-					ok: true,
-					data: { status: 'skipped', reason: 'Failed to fetch device info' },
-					code: 200
-				};
-			}
-
-			const activeAssetId = extractActiveAssetId(device.image);
+			const activeAssetId = await this.processedImagesRepo.findActiveAssetId();
 			const activeIndex = activeAssetId
 				? candidates.findIndex((candidate) => candidate.asset_id === activeAssetId)
 				: -1;
+			const nextIndex = activeIndex === -1 ? 0 : (activeIndex + 1) % candidates.length;
 
-			if (activeIndex === -1) {
-				log.debug(
-					`Cycle skipped: no resolvable active asset among processed images (device image: ${device.image})`
-				);
-				return {
-					ok: true,
-					data: { status: 'skipped', reason: 'No resolvable active asset' },
-					code: 200
-				};
-			}
-
-			const nextRecord = candidates[(activeIndex + 1) % candidates.length];
-			const push = await this.pushRecord(nextRecord);
-
-			return { ok: true, data: { status: 'pushed', push }, code: 200 };
+			const data = await this.pushRecord(candidates[nextIndex]);
+			return { ok: true, data, code: 200 };
 		} catch (error) {
 			log.error('Error cycling active picture on Bloomin8 frame:', error);
 			return { ok: false, error: 'Failed to cycle active picture', code: 502 };
@@ -350,6 +323,15 @@ export class PictureFrameService {
 			`${record.asset_id}-${version}.jpg`,
 			{ showNow: true }
 		);
+
+		try {
+			await this.processedImagesRepo.setActive(record.asset_id);
+		} catch (error) {
+			log.error(
+				`Failed to persist active state for asset ${record.asset_id} after a successful push:`,
+				error
+			);
+		}
 
 		return {
 			asset: { id: record.asset_id, filename: record.filename },

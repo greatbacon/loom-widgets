@@ -61,7 +61,11 @@ describe('runNightlyPictureFrameBatch', () => {
 		});
 		cycleActiveAsset.mockResolvedValue({
 			ok: true,
-			data: { status: 'pushed' },
+			data: {
+				asset: { id: 'asset-1', filename: 'photo.jpg' },
+				device: { width: 1200, height: 1600 },
+				path: '/gallerys/default/asset-1.jpg'
+			},
 			code: 200
 		});
 

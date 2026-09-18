@@ -14,7 +14,8 @@
 	let selectedAssetId = $state<string | null>(null);
 	// Optimistic guess at which asset is now on the frame, set on a successful
 	// push. Reset whenever fresh load data arrives, deferring back to the
-	// server-derived `asset.active` (from the frame's real reported image).
+	// server-derived `asset.active` (the DB's stored active flag, set when a
+	// push to the frame succeeds).
 	let pushedActiveId = $state<string | null>(null);
 
 	$effect(() => {

@@ -24,9 +24,7 @@ const sharpInstance = vi.hoisted(() => ({
 
 vi.mock('sharp', () => ({ default: vi.fn(() => sharpInstance) }));
 
-const { PictureFrameService, extractActiveAssetId, computeDefaultCrop } = await import(
-	'./pictureFrameService.server'
-);
+const { PictureFrameService, computeDefaultCrop } = await import('./pictureFrameService.server');
 
 const makeAlbum = (overrides: Partial<ImmichAlbum> = {}): ImmichAlbum => ({
 	id: 'album-1',
@@ -54,29 +52,8 @@ const makeProcessedRow = (overrides: Partial<ProcessedImageRow> = {}): Processed
 	file_path: 'data/processed/asset-1.jpg',
 	created_at: new Date('2026-01-01T00:00:00Z'),
 	updated_at: null,
+	active: false,
 	...overrides
-});
-
-describe('extractActiveAssetId', () => {
-	it('returns null for an empty string', () => {
-		expect(extractActiveAssetId('')).toBeNull();
-	});
-
-	it('extracts the asset id from a full gallery path', () => {
-		expect(extractActiveAssetId('/gallerys/default/asset-1-1700000000000.jpg')).toBe('asset-1');
-	});
-
-	it('correctly splits a UUID-style asset id containing hyphens', () => {
-		expect(
-			extractActiveAssetId(
-				'/gallerys/default/3fa85f64-5717-4562-b3fc-2c963f66afa6-1700000000000.jpg'
-			)
-		).toBe('3fa85f64-5717-4562-b3fc-2c963f66afa6');
-	});
-
-	it('returns null for a filename that does not match the convention', () => {
-		expect(extractActiveAssetId('/gallerys/default/demo.jpg')).toBeNull();
-	});
 });
 
 describe('PictureFrameService', () => {
@@ -92,6 +69,8 @@ describe('PictureFrameService', () => {
 		listAll: sinon.SinonStub;
 		listAssetIds: sinon.SinonStub;
 		upsert: sinon.SinonStub;
+		findActiveAssetId: sinon.SinonStub;
+		setActive: sinon.SinonStub;
 	};
 	let imageStorage: { write: sinon.SinonStub; read: sinon.SinonStub };
 	let service: InstanceType<typeof PictureFrameService>;
@@ -116,7 +95,9 @@ describe('PictureFrameService', () => {
 			findByAssetId: sinon.stub(),
 			listAll: sinon.stub(),
 			listAssetIds: sinon.stub().resolves([]),
-			upsert: sinon.stub()
+			upsert: sinon.stub(),
+			findActiveAssetId: sinon.stub().resolves(null),
+			setActive: sinon.stub().resolves(undefined)
 		};
 		imageStorage = { write: sinon.stub(), read: sinon.stub() };
 		service = new PictureFrameService(
@@ -147,7 +128,8 @@ describe('PictureFrameService', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						}
 					]
 				},
@@ -174,11 +156,25 @@ describe('PictureFrameService', () => {
 							type: 'IMAGE',
 							thumbnailUrl: '/picture-frame/thumbnail/asset-1',
 							originalUrl: '/picture-frame/original/asset-1',
-							processed: true
+							processed: true,
+							active: false
 						}
 					]
 				},
 				code: 200
+			});
+		});
+
+		it('marks the asset matching findActiveAssetId() as active', async () => {
+			immichClient.getAlbum.resolves(makeAlbum());
+			processedImagesRepo.listAssetIds.resolves(['asset-1']);
+			processedImagesRepo.findActiveAssetId.resolves('asset-1');
+
+			const result = await service.getAlbumContents('album-1');
+
+			expect(result).toMatchObject({
+				ok: true,
+				data: { assets: [expect.objectContaining({ id: 'asset-1', active: true })] }
 			});
 		});
 
@@ -594,6 +590,7 @@ describe('PictureFrameService', () => {
 					{ showNow: true }
 				)
 			).toBe(true);
+			expect(processedImagesRepo.setActive.calledWithExactly('asset-1')).toBe(true);
 			expect(result).toEqual({
 				ok: true,
 				data: {
@@ -603,6 +600,15 @@ describe('PictureFrameService', () => {
 				},
 				code: 200
 			});
+		});
+
+		it('reports the push as successful even when setActive rejects', async () => {
+			processedImagesRepo.findByAssetId.resolves(makeProcessedRow());
+			processedImagesRepo.setActive.rejects(new Error('db down'));
+
+			const result = await service.pushAsset('asset-1');
+
+			expect(result).toMatchObject({ ok: true, data: { asset: { id: 'asset-1' } } });
 		});
 
 		it('versions the filename by updated_at, not created_at, once the asset has been re-processed', async () => {
@@ -712,48 +718,33 @@ describe('PictureFrameService', () => {
 			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
 		});
 
-		it('skips without pushing when getDeviceInfo rejects', async () => {
-			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
-			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
+		it('pushes candidates[0] when there is no active row and multiple candidates exist', async () => {
+			const candidates = [
+				makeProcessedRow({ asset_id: 'asset-1', file_path: 'data/processed/asset-1.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-2', file_path: 'data/processed/asset-2.jpg' })
+			];
+			processedImagesRepo.listAll.resolves(candidates);
+			processedImagesRepo.findActiveAssetId.resolves(null);
 
 			const result = await service.cycleActiveAsset();
 
-			expect(result).toEqual({
-				ok: true,
-				data: { status: 'skipped', reason: 'Failed to fetch device info' },
-				code: 200
-			});
-			expect(bloomin8Client.uploadImage.called).toBe(false);
+			expect(imageStorage.read.calledWithExactly('data/processed/asset-1.jpg')).toBe(true);
+			expect(result).toMatchObject({ ok: true, data: { asset: { id: 'asset-1' } } });
+			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
 		});
 
-		it('skips without pushing when the device image does not match the naming convention', async () => {
-			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
-			bloomin8Client.getDeviceInfo.resolves({ image: '/gallerys/default/demo.jpg' });
+		it('falls back to pushing candidates[0] when the resolved active asset id is not among the processed candidates', async () => {
+			const candidates = [
+				makeProcessedRow({ asset_id: 'asset-1', file_path: 'data/processed/asset-1.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-2', file_path: 'data/processed/asset-2.jpg' })
+			];
+			processedImagesRepo.listAll.resolves(candidates);
+			processedImagesRepo.findActiveAssetId.resolves('asset-9');
 
 			const result = await service.cycleActiveAsset();
 
-			expect(result).toEqual({
-				ok: true,
-				data: { status: 'skipped', reason: 'No resolvable active asset' },
-				code: 200
-			});
-			expect(bloomin8Client.uploadImage.called).toBe(false);
-		});
-
-		it('skips without pushing when the resolved active asset is not among the processed candidates', async () => {
-			processedImagesRepo.listAll.resolves([makeProcessedRow({ asset_id: 'asset-1' })]);
-			bloomin8Client.getDeviceInfo.resolves({
-				image: '/gallerys/default/asset-9-1700000000000.jpg'
-			});
-
-			const result = await service.cycleActiveAsset();
-
-			expect(result).toEqual({
-				ok: true,
-				data: { status: 'skipped', reason: 'No resolvable active asset' },
-				code: 200
-			});
-			expect(bloomin8Client.uploadImage.called).toBe(false);
+			expect(imageStorage.read.calledWithExactly('data/processed/asset-1.jpg')).toBe(true);
+			expect(result).toMatchObject({ ok: true, data: { asset: { id: 'asset-1' } } });
 		});
 
 		it('pushes the next candidate after the active one in sorted order', async () => {
@@ -763,9 +754,7 @@ describe('PictureFrameService', () => {
 				makeProcessedRow({ asset_id: 'asset-3', file_path: 'data/processed/asset-3.jpg' })
 			];
 			processedImagesRepo.listAll.resolves(candidates);
-			bloomin8Client.getDeviceInfo.resolves({
-				image: '/gallerys/default/asset-1-1700000000000.jpg'
-			});
+			processedImagesRepo.findActiveAssetId.resolves('asset-1');
 
 			const result = await service.cycleActiveAsset();
 
@@ -780,12 +769,9 @@ describe('PictureFrameService', () => {
 			expect(result).toEqual({
 				ok: true,
 				data: {
-					status: 'pushed',
-					push: {
-						asset: { id: 'asset-2', filename: 'photo.jpg' },
-						device: { width: 1200, height: 1600 },
-						path: '/gallerys/default/asset-2.jpg'
-					}
+					asset: { id: 'asset-2', filename: 'photo.jpg' },
+					device: { width: 1200, height: 1600 },
+					path: '/gallerys/default/asset-2.jpg'
 				},
 				code: 200
 			});
@@ -798,24 +784,17 @@ describe('PictureFrameService', () => {
 				makeProcessedRow({ asset_id: 'asset-3', file_path: 'data/processed/asset-3.jpg' })
 			];
 			processedImagesRepo.listAll.resolves(candidates);
-			bloomin8Client.getDeviceInfo.resolves({
-				image: '/gallerys/default/asset-3-1700000000000.jpg'
-			});
+			processedImagesRepo.findActiveAssetId.resolves('asset-3');
 
 			const result = await service.cycleActiveAsset();
 
 			expect(imageStorage.read.calledWithExactly('data/processed/asset-1.jpg')).toBe(true);
-			expect(result).toMatchObject({
-				ok: true,
-				data: { status: 'pushed', push: { asset: { id: 'asset-1' } } }
-			});
+			expect(result).toMatchObject({ ok: true, data: { asset: { id: 'asset-1' } } });
 		});
 
 		it('returns a 502 error when imageStorage.read rejects during the push', async () => {
 			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
-			bloomin8Client.getDeviceInfo.resolves({
-				image: '/gallerys/default/asset-1-1700000000000.jpg'
-			});
+			processedImagesRepo.findActiveAssetId.resolves('asset-1');
 			imageStorage.read.rejects(new Error('disk error'));
 
 			const result = await service.cycleActiveAsset();
@@ -829,9 +808,7 @@ describe('PictureFrameService', () => {
 
 		it('returns a 502 error when uploadImage rejects during the push', async () => {
 			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
-			bloomin8Client.getDeviceInfo.resolves({
-				image: '/gallerys/default/asset-1-1700000000000.jpg'
-			});
+			processedImagesRepo.findActiveAssetId.resolves('asset-1');
 			bloomin8Client.uploadImage.rejects(new Error('unreachable'));
 
 			const result = await service.cycleActiveAsset();
