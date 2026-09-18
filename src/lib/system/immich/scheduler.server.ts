@@ -20,6 +20,15 @@ export async function runNightlyPictureFrameBatch(): Promise<void> {
 		log.debug(
 			`Nightly picture-frame batch complete: ${result.data.processedCount} processed, ${result.data.failedCount} failed`
 		);
+
+		const cycleResult = await service.cycleActiveAsset();
+
+		if (!cycleResult.ok) {
+			log.error('Nightly picture-frame cycle failed:', cycleResult.error);
+			return;
+		}
+
+		log.debug(`Nightly picture-frame cycle: ${cycleResult.data.status}`);
 	} finally {
 		await sql.end();
 	}

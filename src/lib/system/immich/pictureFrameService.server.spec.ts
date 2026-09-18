@@ -693,6 +693,157 @@ describe('PictureFrameService', () => {
 		});
 	});
 
+	describe('cycleActiveAsset', () => {
+		beforeEach(() => {
+			imageStorage.read.resolves(Buffer.from('jpeg-bytes'));
+			bloomin8Client.uploadImage.resolves({ status: 100, path: '/gallerys/default/asset-2.jpg' });
+		});
+
+		it('returns a 409 error when there are no processed candidates', async () => {
+			processedImagesRepo.listAll.resolves([]);
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'No processed assets available to cycle',
+				code: 409
+			});
+			expect(bloomin8Client.getDeviceInfo.called).toBe(false);
+		});
+
+		it('skips without pushing when getDeviceInfo rejects', async () => {
+			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
+			bloomin8Client.getDeviceInfo.rejects(new Error('unreachable'));
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: true,
+				data: { status: 'skipped', reason: 'Failed to fetch device info' },
+				code: 200
+			});
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+		});
+
+		it('skips without pushing when the device image does not match the naming convention', async () => {
+			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
+			bloomin8Client.getDeviceInfo.resolves({ image: '/gallerys/default/demo.jpg' });
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: true,
+				data: { status: 'skipped', reason: 'No resolvable active asset' },
+				code: 200
+			});
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+		});
+
+		it('skips without pushing when the resolved active asset is not among the processed candidates', async () => {
+			processedImagesRepo.listAll.resolves([makeProcessedRow({ asset_id: 'asset-1' })]);
+			bloomin8Client.getDeviceInfo.resolves({
+				image: '/gallerys/default/asset-9-1700000000000.jpg'
+			});
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: true,
+				data: { status: 'skipped', reason: 'No resolvable active asset' },
+				code: 200
+			});
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+		});
+
+		it('pushes the next candidate after the active one in sorted order', async () => {
+			const candidates = [
+				makeProcessedRow({ asset_id: 'asset-1', file_path: 'data/processed/asset-1.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-2', file_path: 'data/processed/asset-2.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-3', file_path: 'data/processed/asset-3.jpg' })
+			];
+			processedImagesRepo.listAll.resolves(candidates);
+			bloomin8Client.getDeviceInfo.resolves({
+				image: '/gallerys/default/asset-1-1700000000000.jpg'
+			});
+
+			const result = await service.cycleActiveAsset();
+
+			expect(imageStorage.read.calledWithExactly('data/processed/asset-2.jpg')).toBe(true);
+			expect(
+				bloomin8Client.uploadImage.calledWithExactly(
+					Buffer.from('jpeg-bytes'),
+					`asset-2-${candidates[1].created_at.getTime()}.jpg`,
+					{ showNow: true }
+				)
+			).toBe(true);
+			expect(result).toEqual({
+				ok: true,
+				data: {
+					status: 'pushed',
+					push: {
+						asset: { id: 'asset-2', filename: 'photo.jpg' },
+						device: { width: 1200, height: 1600 },
+						path: '/gallerys/default/asset-2.jpg'
+					}
+				},
+				code: 200
+			});
+		});
+
+		it('wraps around to the first candidate when the active one is last in sorted order', async () => {
+			const candidates = [
+				makeProcessedRow({ asset_id: 'asset-1', file_path: 'data/processed/asset-1.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-2', file_path: 'data/processed/asset-2.jpg' }),
+				makeProcessedRow({ asset_id: 'asset-3', file_path: 'data/processed/asset-3.jpg' })
+			];
+			processedImagesRepo.listAll.resolves(candidates);
+			bloomin8Client.getDeviceInfo.resolves({
+				image: '/gallerys/default/asset-3-1700000000000.jpg'
+			});
+
+			const result = await service.cycleActiveAsset();
+
+			expect(imageStorage.read.calledWithExactly('data/processed/asset-1.jpg')).toBe(true);
+			expect(result).toMatchObject({
+				ok: true,
+				data: { status: 'pushed', push: { asset: { id: 'asset-1' } } }
+			});
+		});
+
+		it('returns a 502 error when imageStorage.read rejects during the push', async () => {
+			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
+			bloomin8Client.getDeviceInfo.resolves({
+				image: '/gallerys/default/asset-1-1700000000000.jpg'
+			});
+			imageStorage.read.rejects(new Error('disk error'));
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to cycle active picture',
+				code: 502
+			});
+		});
+
+		it('returns a 502 error when uploadImage rejects during the push', async () => {
+			processedImagesRepo.listAll.resolves([makeProcessedRow()]);
+			bloomin8Client.getDeviceInfo.resolves({
+				image: '/gallerys/default/asset-1-1700000000000.jpg'
+			});
+			bloomin8Client.uploadImage.rejects(new Error('unreachable'));
+
+			const result = await service.cycleActiveAsset();
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to cycle active picture',
+				code: 502
+			});
+		});
+	});
+
 	describe('getAssetThumbnail', () => {
 		it('returns the thumbnail data and content type on success', async () => {
 			const thumbnail = { data: new Uint8Array([1, 2, 3]).buffer, contentType: 'image/webp' };

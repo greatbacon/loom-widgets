@@ -56,6 +56,7 @@ export class ProcessedImagesRepo extends Repo {
 			SELECT asset_id, filename, crop_x, crop_y, crop_width, crop_height,
 			       device_width, device_height, file_path, created_at, updated_at
 			FROM processed_images
+			ORDER BY asset_id
 		`;
 	}
 

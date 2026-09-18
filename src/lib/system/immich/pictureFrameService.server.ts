@@ -11,9 +11,11 @@ import type {
 	CropRect,
 	PictureFrameAlbum,
 	PictureFrameAsset,
+	PictureFrameCycleResult,
 	PictureFramePushResult,
 	PictureFrameProcessResult,
-	PictureFrameBatchResult
+	PictureFrameBatchResult,
+	ProcessedImageRow
 } from '$lib/system/immich/pictureFrame';
 
 export interface Result<T> {
@@ -73,15 +75,17 @@ export class PictureFrameService {
 			const album = await this.immichClient.getAlbum(albumId);
 			const processedAssetIds = new Set(await this.processedImagesRepo.listAssetIds());
 
-			const assets: PictureFrameAsset[] = album.assets.map((asset) => ({
-				id: asset.id,
-				filename: asset.originalFileName,
-				takenAt: asset.fileCreatedAt,
-				type: asset.type,
-				thumbnailUrl: `/picture-frame/thumbnail/${asset.id}`,
-				originalUrl: `/picture-frame/original/${asset.id}`,
-				processed: processedAssetIds.has(asset.id)
-			}));
+			const assets: PictureFrameAsset[] = album.assets
+				.map((asset) => ({
+					id: asset.id,
+					filename: asset.originalFileName,
+					takenAt: asset.fileCreatedAt,
+					type: asset.type,
+					thumbnailUrl: `/picture-frame/thumbnail/${asset.id}`,
+					originalUrl: `/picture-frame/original/${asset.id}`,
+					processed: processedAssetIds.has(asset.id)
+				}))
+				.sort((a, b) => a.id.localeCompare(b.id));
 
 			return {
 				ok: true,
@@ -281,31 +285,77 @@ export class PictureFrameService {
 				record = candidates[Math.floor(Math.random() * candidates.length)];
 			}
 
-			const jpeg = await this.imageStorage.read(record.file_path);
-			// The Bloomin8 frame appears to cache display state per filename, so a
-			// re-processed image pushed under its old filename can render stale. Stamp
-			// the filename with the processed record's version so each re-crop is seen
-			// as a new file.
-			const version = (record.updated_at ?? record.created_at).getTime();
-			const upload = await this.bloomin8Client.uploadImage(
-				jpeg,
-				`${record.asset_id}-${version}.jpg`,
-				{ showNow: true }
-			);
-
-			return {
-				ok: true,
-				data: {
-					asset: { id: record.asset_id, filename: record.filename },
-					device: { width: record.device_width, height: record.device_height },
-					path: upload.path
-				},
-				code: 200
-			};
+			const data = await this.pushRecord(record);
+			return { ok: true, data, code: 200 };
 		} catch (error) {
 			log.error('Error pushing image to Bloomin8 frame:', error);
 			return { ok: false, error: 'Failed to push image to Bloomin8 frame', code: 502 };
 		}
+	}
+
+	async cycleActiveAsset(): Promise<Result<PictureFrameCycleResult> | Error> {
+		try {
+			const candidates = await this.processedImagesRepo.listAll();
+			if (candidates.length === 0) {
+				return { ok: false, error: 'No processed assets available to cycle', code: 409 };
+			}
+
+			let device: Bloomin8DeviceInfo;
+			try {
+				device = await this.bloomin8Client.getDeviceInfo();
+			} catch (error) {
+				log.error('Cycle skipped: failed to fetch device info:', error);
+				return {
+					ok: true,
+					data: { status: 'skipped', reason: 'Failed to fetch device info' },
+					code: 200
+				};
+			}
+
+			const activeAssetId = extractActiveAssetId(device.image);
+			const activeIndex = activeAssetId
+				? candidates.findIndex((candidate) => candidate.asset_id === activeAssetId)
+				: -1;
+
+			if (activeIndex === -1) {
+				log.debug(
+					`Cycle skipped: no resolvable active asset among processed images (device image: ${device.image})`
+				);
+				return {
+					ok: true,
+					data: { status: 'skipped', reason: 'No resolvable active asset' },
+					code: 200
+				};
+			}
+
+			const nextRecord = candidates[(activeIndex + 1) % candidates.length];
+			const push = await this.pushRecord(nextRecord);
+
+			return { ok: true, data: { status: 'pushed', push }, code: 200 };
+		} catch (error) {
+			log.error('Error cycling active picture on Bloomin8 frame:', error);
+			return { ok: false, error: 'Failed to cycle active picture', code: 502 };
+		}
+	}
+
+	private async pushRecord(record: ProcessedImageRow): Promise<PictureFramePushResult> {
+		const jpeg = await this.imageStorage.read(record.file_path);
+		// The Bloomin8 frame appears to cache display state per filename, so a
+		// re-processed image pushed under its old filename can render stale. Stamp
+		// the filename with the processed record's version so each re-crop is seen
+		// as a new file.
+		const version = (record.updated_at ?? record.created_at).getTime();
+		const upload = await this.bloomin8Client.uploadImage(
+			jpeg,
+			`${record.asset_id}-${version}.jpg`,
+			{ showNow: true }
+		);
+
+		return {
+			asset: { id: record.asset_id, filename: record.filename },
+			device: { width: record.device_width, height: record.device_height },
+			path: upload.path
+		};
 	}
 
 	async getDeviceInfo(): Promise<Result<Bloomin8DeviceInfo> | Error> {

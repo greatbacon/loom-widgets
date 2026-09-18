@@ -27,6 +27,12 @@ export interface PictureFramePushResult {
 	path: string;
 }
 
+export interface PictureFrameCycleResult {
+	status: 'pushed' | 'skipped';
+	reason?: string;
+	push?: PictureFramePushResult;
+}
+
 export interface CropRect {
 	x: number;
 	y: number;
