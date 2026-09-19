@@ -63,7 +63,12 @@ describe('PictureFrameService', () => {
 		getAssetThumbnail: sinon.SinonStub;
 		getAssetPreview: sinon.SinonStub;
 	};
-	let bloomin8Client: { getDeviceInfo: sinon.SinonStub; uploadImage: sinon.SinonStub };
+	let bloomin8Client: {
+		getDeviceInfo: sinon.SinonStub;
+		uploadImage: sinon.SinonStub;
+		getUpstreamPullSettings: sinon.SinonStub;
+		setUpstreamPullSettings: sinon.SinonStub;
+	};
 	let processedImagesRepo: {
 		findByAssetId: sinon.SinonStub;
 		listAll: sinon.SinonStub;
@@ -90,7 +95,12 @@ describe('PictureFrameService', () => {
 			getAssetThumbnail: sinon.stub(),
 			getAssetPreview: sinon.stub()
 		};
-		bloomin8Client = { getDeviceInfo: sinon.stub(), uploadImage: sinon.stub() };
+		bloomin8Client = {
+			getDeviceInfo: sinon.stub(),
+			uploadImage: sinon.stub(),
+			getUpstreamPullSettings: sinon.stub(),
+			setUpstreamPullSettings: sinon.stub()
+		};
 		processedImagesRepo = {
 			findByAssetId: sinon.stub(),
 			listAll: sinon.stub(),
@@ -893,6 +903,60 @@ describe('PictureFrameService', () => {
 			expect(result).toEqual({
 				ok: false,
 				error: 'Failed to fetch device info from Bloomin8 frame',
+				code: 502
+			});
+		});
+	});
+
+	describe('getUpstreamPullSettings', () => {
+		it('returns the settings on success', async () => {
+			const settings = {
+				upstream_on: true,
+				upstream_url: 'http://upstream.test',
+				token: 'abc',
+				next_cron_time: 1700000000,
+				pre_image: '/gallerys/default/x.jpg',
+				time: 1700000001
+			};
+			bloomin8Client.getUpstreamPullSettings.resolves(settings);
+
+			const result = await service.getUpstreamPullSettings();
+
+			expect(result).toEqual({ ok: true, data: settings, code: 200 });
+		});
+
+		it('returns a 502 error when the client rejects', async () => {
+			bloomin8Client.getUpstreamPullSettings.rejects(new Error('unreachable'));
+
+			const result = await service.getUpstreamPullSettings();
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to fetch upstream pull settings from Bloomin8 frame',
+				code: 502
+			});
+		});
+	});
+
+	describe('setUpstreamPullSettings', () => {
+		it('calls the client with the given input and returns null data on success', async () => {
+			bloomin8Client.setUpstreamPullSettings.resolves(undefined);
+			const input = { upstream_on: false, upstream_url: 'http://upstream.test' };
+
+			const result = await service.setUpstreamPullSettings(input);
+
+			expect(bloomin8Client.setUpstreamPullSettings.calledWithExactly(input)).toBe(true);
+			expect(result).toEqual({ ok: true, data: null, code: 200 });
+		});
+
+		it('returns a 502 error when the client rejects', async () => {
+			bloomin8Client.setUpstreamPullSettings.rejects(new Error('unreachable'));
+
+			const result = await service.setUpstreamPullSettings({ upstream_on: true });
+
+			expect(result).toEqual({
+				ok: false,
+				error: 'Failed to update upstream pull settings on Bloomin8 frame',
 				code: 502
 			});
 		});

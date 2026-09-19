@@ -4,7 +4,11 @@ import postgres from 'postgres';
 import { defaultPostgresOptions } from '$lib/db/postgres.server';
 import { ImmichClient } from '$lib/system/immich/immichClient.server';
 import { Bloomin8Client } from '$lib/system/bloomin8/bloomin8Client.server';
-import type { Bloomin8DeviceInfo } from '$lib/system/bloomin8/bloomin8Client.server';
+import type {
+	Bloomin8DeviceInfo,
+	Bloomin8PullSettings,
+	Bloomin8PullSettingsInput
+} from '$lib/system/bloomin8/bloomin8Client.server';
 import { ProcessedImagesRepo } from '$lib/system/immich/processedImagesRepo';
 import { ProcessedImageStorage } from '$lib/system/immich/processedImageStorage.server';
 import type {
@@ -347,6 +351,36 @@ export class PictureFrameService {
 		} catch (error) {
 			log.error('Error fetching Bloomin8 device info:', error);
 			return { ok: false, error: 'Failed to fetch device info from Bloomin8 frame', code: 502 };
+		}
+	}
+
+	async getUpstreamPullSettings(): Promise<Result<Bloomin8PullSettings> | Error> {
+		try {
+			const settings = await this.bloomin8Client.getUpstreamPullSettings();
+			return { ok: true, data: settings, code: 200 };
+		} catch (error) {
+			log.error('Error fetching Bloomin8 upstream pull settings:', error);
+			return {
+				ok: false,
+				error: 'Failed to fetch upstream pull settings from Bloomin8 frame',
+				code: 502
+			};
+		}
+	}
+
+	async setUpstreamPullSettings(
+		settings: Bloomin8PullSettingsInput
+	): Promise<Result<null> | Error> {
+		try {
+			await this.bloomin8Client.setUpstreamPullSettings(settings);
+			return { ok: true, data: null, code: 200 };
+		} catch (error) {
+			log.error('Error updating Bloomin8 upstream pull settings:', error);
+			return {
+				ok: false,
+				error: 'Failed to update upstream pull settings on Bloomin8 frame',
+				code: 502
+			};
 		}
 	}
 }

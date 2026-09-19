@@ -556,6 +556,108 @@ describe('/picture-frame/+page.svelte', () => {
 		await expect.element(page.getByText('Failed to auto-process album assets')).toBeInTheDocument();
 	});
 
+	it('fetches settings and shows the modal pre-filled with the fetched values on "Schedule pull…"', async () => {
+		const fetchStub = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					upstream_on: true,
+					upstream_url: 'http://upstream.test',
+					token: 'secret',
+					next_cron_time: 0,
+					pre_image: '/gallerys/default/last.jpg',
+					time: 1700000000
+				}),
+				{ status: 200 }
+			)
+		);
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: null,
+				albumError: null
+			}
+		});
+
+		await page.getByRole('button', { name: 'Schedule pull…' }).click();
+
+		expect(fetchStub).toHaveBeenCalledWith('/picture-frame/schedule');
+		await expect.element(page.getByText('Schedule pull', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByLabelText('Upstream URL')).toHaveValue('http://upstream.test');
+	});
+
+	it('saving in the schedule modal PUTs the edited settings and closes the modal', async () => {
+		const fetchStub = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+			if (!init) {
+				return Promise.resolve(
+					new Response(
+						JSON.stringify({
+							upstream_on: true,
+							upstream_url: 'http://upstream.test',
+							token: 'secret',
+							next_cron_time: 0,
+							pre_image: '',
+							time: 1700000000
+						}),
+						{ status: 200 }
+					)
+				);
+			}
+			return Promise.resolve(new Response(JSON.stringify(null), { status: 200 }));
+		});
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: null,
+				albumError: null
+			}
+		});
+
+		await page.getByRole('button', { name: 'Schedule pull…' }).click();
+		await expect.element(page.getByText('Schedule pull', { exact: true })).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Save' }).click();
+
+		expect(fetchStub).toHaveBeenCalledWith(
+			'/picture-frame/schedule',
+			expect.objectContaining({ method: 'PUT' })
+		);
+		await expect.element(page.getByText('Schedule pull', { exact: true })).not.toBeInTheDocument();
+	});
+
+	it('shows an inline error and does not open the modal when fetching settings fails', async () => {
+		const fetchStub = vi.fn().mockResolvedValue(
+			new Response('Failed to fetch upstream pull settings from Bloomin8 frame', {
+				status: 502
+			})
+		);
+		vi.stubGlobal('fetch', fetchStub);
+
+		render(Page, {
+			data: {
+				isAuthenticated: true,
+				device: null,
+				deviceError: null,
+				album: null,
+				albumError: null
+			}
+		});
+
+		await page.getByRole('button', { name: 'Schedule pull…' }).click();
+
+		await expect
+			.element(page.getByText('Failed to fetch upstream pull settings from Bloomin8 frame'))
+			.toBeInTheDocument();
+		await expect.element(page.getByText('Schedule pull', { exact: true })).not.toBeInTheDocument();
+	});
+
 	it('shows data.albumError when data.album is null and albumError is set', async () => {
 		render(Page, {
 			data: {

@@ -2,13 +2,22 @@
 	import { Button } from 'svelte-ux';
 	import { invalidateAll } from '$app/navigation';
 	import type { CropRect, PictureFramePushResult } from '$lib/system/immich/pictureFrame';
+	import type {
+		Bloomin8PullSettings,
+		Bloomin8PullSettingsInput
+	} from '$lib/system/bloomin8/bloomin8Client.server';
 	import CropEditor from './CropEditor.svelte';
+	import ScheduleModal from './ScheduleModal.svelte';
 
 	let { data } = $props();
 
 	let loading = $state(false);
 	let processing = $state(false);
 	let showCropEditor = $state(false);
+	let showScheduleModal = $state(false);
+	let scheduleSettings = $state<Bloomin8PullSettings | null>(null);
+	let scheduleLoading = $state(false);
+	let scheduleSaving = $state(false);
 	let result = $state<PictureFramePushResult | null>(null);
 	let errorMessage = $state<string | null>(null);
 	let selectedAssetId = $state<string | null>(null);
@@ -97,6 +106,41 @@
 			autoProcessing = false;
 		}
 	}
+
+	async function openScheduleModal() {
+		scheduleLoading = true;
+		errorMessage = null;
+		try {
+			const response = await fetch('/picture-frame/schedule');
+			if (!response.ok) {
+				errorMessage = (await response.text()) || `Request failed with status ${response.status}`;
+				return;
+			}
+			scheduleSettings = await response.json();
+			showScheduleModal = true;
+		} finally {
+			scheduleLoading = false;
+		}
+	}
+
+	async function handleScheduleSave(input: Bloomin8PullSettingsInput) {
+		scheduleSaving = true;
+		errorMessage = null;
+		try {
+			const response = await fetch('/picture-frame/schedule', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(input)
+			});
+			if (!response.ok) {
+				errorMessage = (await response.text()) || `Request failed with status ${response.status}`;
+				return;
+			}
+			showScheduleModal = false;
+		} finally {
+			scheduleSaving = false;
+		}
+	}
 </script>
 
 <div class="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
@@ -150,6 +194,14 @@
 			on:click={processNewPhotos}
 		>
 			Process new photos
+		</Button>
+		<Button
+			variant="outline"
+			color="secondary"
+			loading={scheduleLoading}
+			on:click={openScheduleModal}
+		>
+			Schedule pull…
 		</Button>
 	</div>
 
@@ -208,4 +260,12 @@
 			oncancel={() => (showCropEditor = false)}
 		/>
 	{/if}
+
+	<ScheduleModal
+		bind:open={showScheduleModal}
+		settings={scheduleSettings}
+		saving={scheduleSaving}
+		onsave={handleScheduleSave}
+		oncancel={() => (showScheduleModal = false)}
+	/>
 </div>

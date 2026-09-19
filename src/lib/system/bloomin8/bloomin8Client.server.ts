@@ -20,6 +20,22 @@ export interface Bloomin8UploadOptions {
 	showNow?: boolean;
 }
 
+export interface Bloomin8PullSettings {
+	upstream_on: boolean;
+	upstream_url: string;
+	token: string;
+	next_cron_time: number;
+	pre_image: string;
+	time: number;
+}
+
+export interface Bloomin8PullSettingsInput {
+	upstream_on?: boolean;
+	upstream_url?: string;
+	token?: string;
+	cron_time?: string;
+}
+
 export class Bloomin8Client {
 	constructor(private readonly baseUrl: string = env.BLOOMIN8_URL!) {}
 
@@ -31,6 +47,28 @@ export class Bloomin8Client {
 		}
 
 		return (await response.json()) as Bloomin8DeviceInfo;
+	}
+
+	async getUpstreamPullSettings(): Promise<Bloomin8PullSettings> {
+		const response = await fetch(`${this.baseUrl}/upstream/pull_settings`);
+
+		if (!response.ok) {
+			throw new Error(`Bloomin8 request failed: ${response.status} ${response.statusText}`);
+		}
+
+		return (await response.json()) as Bloomin8PullSettings;
+	}
+
+	async setUpstreamPullSettings(settings: Bloomin8PullSettingsInput): Promise<void> {
+		const response = await fetch(`${this.baseUrl}/upstream/pull_settings`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(settings)
+		});
+
+		if (!response.ok) {
+			throw new Error(`Bloomin8 request failed: ${response.status} ${response.statusText}`);
+		}
 	}
 
 	async uploadImage(
