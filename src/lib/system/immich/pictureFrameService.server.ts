@@ -55,6 +55,15 @@ export function computeDefaultCrop(
 	};
 }
 
+export function shouldCycleOnPull(now: Date = new Date()): boolean {
+	return now.getHours() === 1;
+}
+
+export function computeNextCronTime(now: Date = new Date()): string {
+	const next = new Date(now.getTime() + 60 * 60 * 1000);
+	return next.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 export class PictureFrameService {
 	constructor(
 		private readonly immichClient: ImmichClient = new ImmichClient(),
@@ -342,6 +351,17 @@ export class PictureFrameService {
 			device: { width: record.device_width, height: record.device_height },
 			path: upload.path
 		};
+	}
+
+	async handleEinkPull(now: Date = new Date()): Promise<{ nextCronTime: string }> {
+		if (shouldCycleOnPull(now)) {
+			const result = await this.cycleActiveAsset();
+			if (!result.ok) {
+				log.error('Eink pull cycle failed:', result.error);
+			}
+		}
+
+		return { nextCronTime: computeNextCronTime(now) };
 	}
 
 	async getDeviceInfo(): Promise<Result<Bloomin8DeviceInfo> | Error> {

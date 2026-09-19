@@ -24,7 +24,8 @@ const sharpInstance = vi.hoisted(() => ({
 
 vi.mock('sharp', () => ({ default: vi.fn(() => sharpInstance) }));
 
-const { PictureFrameService, computeDefaultCrop } = await import('./pictureFrameService.server');
+const { PictureFrameService, computeDefaultCrop, shouldCycleOnPull, computeNextCronTime } =
+	await import('./pictureFrameService.server');
 
 const makeAlbum = (overrides: Partial<ImmichAlbum> = {}): ImmichAlbum => ({
 	id: 'album-1',
@@ -828,6 +829,74 @@ describe('PictureFrameService', () => {
 				error: 'Failed to cycle active picture',
 				code: 502
 			});
+		});
+	});
+
+	describe('shouldCycleOnPull', () => {
+		it('returns true at the start of the 1am hour', () => {
+			expect(shouldCycleOnPull(new Date(2026, 0, 1, 1, 0, 0))).toBe(true);
+		});
+
+		it('returns true at the end of the 1am hour', () => {
+			expect(shouldCycleOnPull(new Date(2026, 0, 1, 1, 59, 59))).toBe(true);
+		});
+
+		it('returns false just before the 1am hour', () => {
+			expect(shouldCycleOnPull(new Date(2026, 0, 1, 0, 59, 59))).toBe(false);
+		});
+
+		it('returns false just after the 1am hour', () => {
+			expect(shouldCycleOnPull(new Date(2026, 0, 1, 2, 0, 0))).toBe(false);
+		});
+	});
+
+	describe('computeNextCronTime', () => {
+		it('returns now + 1 hour formatted with no milliseconds', () => {
+			const now = new Date(2026, 0, 1, 0, 30, 0);
+			const expected = new Date(now.getTime() + 60 * 60 * 1000)
+				.toISOString()
+				.replace(/\.\d{3}Z$/, 'Z');
+
+			expect(computeNextCronTime(now)).toBe(expected);
+		});
+	});
+
+	describe('handleEinkPull', () => {
+		beforeEach(() => {
+			imageStorage.read.resolves(Buffer.from('jpeg-bytes'));
+			bloomin8Client.uploadImage.resolves({ status: 100, path: '/gallerys/default/asset-1.jpg' });
+		});
+
+		it('cycles the active asset and returns the next cron time when within the 1am window', async () => {
+			const candidates = [makeProcessedRow({ asset_id: 'asset-1' })];
+			processedImagesRepo.listAll.resolves(candidates);
+			processedImagesRepo.findActiveAssetId.resolves(null);
+			const now = new Date(2026, 0, 1, 1, 30, 0);
+
+			const result = await service.handleEinkPull(now);
+
+			expect(bloomin8Client.uploadImage.called).toBe(true);
+			expect(result).toEqual({ nextCronTime: computeNextCronTime(now) });
+		});
+
+		it('does not cycle and still returns the next cron time when outside the 1am window', async () => {
+			const now = new Date(2026, 0, 1, 2, 0, 0);
+
+			const result = await service.handleEinkPull(now);
+
+			expect(processedImagesRepo.listAll.called).toBe(false);
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+			expect(result).toEqual({ nextCronTime: computeNextCronTime(now) });
+		});
+
+		it('still resolves successfully when the cycle has no candidates to push', async () => {
+			processedImagesRepo.listAll.resolves([]);
+			const now = new Date(2026, 0, 1, 1, 30, 0);
+
+			const result = await service.handleEinkPull(now);
+
+			expect(bloomin8Client.uploadImage.called).toBe(false);
+			expect(result).toEqual({ nextCronTime: computeNextCronTime(now) });
 		});
 	});
 

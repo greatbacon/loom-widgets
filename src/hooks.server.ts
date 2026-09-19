@@ -2,7 +2,13 @@ import { redirect, type Handle, type ServerInit } from '@sveltejs/kit';
 import { resolveSession } from '$lib/system/auth/requestAuth.server';
 import { startNightlyPictureFrameScheduler } from '$lib/system/immich/scheduler.server';
 
-const publicRoutes = ['/signin', '/auth/keycloak/login', '/auth/keycloak/callback', '/auth/logout'];
+const publicRoutes = [
+	'/signin',
+	'/auth/keycloak/login',
+	'/auth/keycloak/callback',
+	'/auth/logout',
+	'/picture-frame/eink_pull'
+];
 
 export const init: ServerInit = () => {
 	startNightlyPictureFrameScheduler();
