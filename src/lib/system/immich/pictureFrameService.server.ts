@@ -354,14 +354,17 @@ export class PictureFrameService {
 	}
 
 	async handleEinkPull(now: Date = new Date()): Promise<{ nextCronTime: string }> {
+		console.debug('handling pull request cycle')
 		if (shouldCycleOnPull(now)) {
+			console.debug('determined it is time to cycle')
 			const result = await this.cycleActiveAsset();
 			if (!result.ok) {
 				log.error('Eink pull cycle failed:', result.error);
 			}
 		}
-
-		return { nextCronTime: computeNextCronTime(now) };
+		const nextCronTime = computeNextCronTime(now);
+		console.log('returning ruquest with new pull time: ', nextCronTime)
+		return { nextCronTime };
 	}
 
 	async getDeviceInfo(): Promise<Result<Bloomin8DeviceInfo> | Error> {

@@ -24,7 +24,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		'Eink pull received:',
 		'device_id=' + url.searchParams.get('device_id'),
 		'pull_id=' + url.searchParams.get('pull_id'),
-		'battery=' + url.searchParams.get('battery')
+		'battery=' + url.searchParams.get('battery'),
+		'time=' + Date.now().toString()
 	);
 
 	const { nextCronTime } = await new PictureFrameService().handleEinkPull();
