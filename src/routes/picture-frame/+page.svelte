@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Button } from 'svelte-ux';
 	import { invalidateAll } from '$app/navigation';
 	import type { CropRect, PictureFramePushResult } from '$lib/system/immich/pictureFrame';
 	import type {
+		Bloomin8DeviceInfo,
 		Bloomin8PullSettings,
 		Bloomin8PullSettingsInput
 	} from '$lib/system/bloomin8/bloomin8Client.server';
@@ -11,6 +13,8 @@
 
 	let { data } = $props();
 
+	let device = $state<Bloomin8DeviceInfo | null>(null);
+	let deviceError = $state<string | null>(null);
 	let loading = $state(false);
 	let processing = $state(false);
 	let showCropEditor = $state(false);
@@ -36,6 +40,26 @@
 	let hasProcessedAssets = $derived(data.album?.assets.some((a) => a.processed) ?? false);
 	let hasUnprocessedAssets = $derived(data.album?.assets.some((a) => !a.processed) ?? false);
 	let autoProcessing = $state(false);
+
+	async function fetchDeviceInfo() {
+		try {
+			const response = await fetch('/picture-frame/device');
+			if (!response.ok) {
+				deviceError = (await response.text()) || `Request failed with status ${response.status}`;
+				device = null;
+				return;
+			}
+			device = await response.json();
+			deviceError = null;
+		} catch (err) {
+			deviceError = err instanceof Error ? err.message : 'Failed to fetch device info';
+			device = null;
+		}
+	}
+
+	onMount(() => {
+		fetchDeviceInfo();
+	});
 
 	async function pushPhoto(assetId?: string) {
 		loading = true;
@@ -86,7 +110,7 @@
 				return;
 			}
 			showCropEditor = false;
-			await invalidateAll();
+			await Promise.all([invalidateAll(), fetchDeviceInfo()]);
 		} finally {
 			processing = false;
 		}
@@ -101,7 +125,7 @@
 				errorMessage = (await response.text()) || `Request failed with status ${response.status}`;
 				return;
 			}
-			await invalidateAll();
+			await Promise.all([invalidateAll(), fetchDeviceInfo()]);
 		} finally {
 			autoProcessing = false;
 		}
@@ -146,16 +170,16 @@
 <div class="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
 	<h1 class="text-2xl font-bold">Picture Frame</h1>
 
-	{#if data.device}
+	{#if device}
 		<div class="flex flex-col items-center gap-1 text-sm">
-			<p>{data.device.name} ({data.device.type})</p>
+			<p>{device.name} ({device.type})</p>
 			<p>
-				{data.device.width}x{data.device.height} &middot; Firmware {data.device.version} &middot; Battery
-				{data.device.battery}%
+				{device.width}x{device.height} &middot; Firmware {device.version} &middot; Battery
+				{device.battery}%
 			</p>
 		</div>
-	{:else if data.deviceError}
-		<p class="text-error">{data.deviceError}</p>
+	{:else if deviceError}
+		<p class="text-error">{deviceError}</p>
 	{/if}
 
 	<div class="flex gap-2">
@@ -181,7 +205,7 @@
 			variant="outline"
 			color="secondary"
 			loading={processing}
-			disabled={loading || processing || !selectedAssetId || !data.device}
+			disabled={loading || processing || !selectedAssetId || !device}
 			on:click={() => (showCropEditor = true)}
 		>
 			Process
@@ -251,11 +275,11 @@
 		<p class="text-error">{data.albumError}</p>
 	{/if}
 
-	{#if selectedAssetId && data.device}
+	{#if selectedAssetId && device}
 		<CropEditor
 			bind:open={showCropEditor}
 			assetId={selectedAssetId}
-			aspectRatio={data.device.width / data.device.height}
+			aspectRatio={device.width / device.height}
 			onconfirm={handleCropConfirm}
 			oncancel={() => (showCropEditor = false)}
 		/>
