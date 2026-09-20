@@ -3,25 +3,53 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 
+const defaultDeviceInfo = {
+	width: 1200,
+	height: 1600,
+	name: 'Frame',
+	version: '1.0',
+	type: 'bloomin8',
+	battery: 90,
+	image: '/gallerys/default/frame.jpg'
+};
+
+// The page fetches /picture-frame/device itself on mount, so every test needs
+// fetch stubbed (even ones that don't care about the device). Handlers return
+// a fresh Response per call, keyed by URL, so onMount's device fetch never
+// shares a Response with an action's fetch (sharing one caused "body stream
+// already read" once the page fetched device info in addition to the action).
+function stubFetch(
+	handlers: Record<string, (init?: RequestInit) => Response | Promise<Response>> = {}
+) {
+	const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
+		const handler = handlers[url];
+		if (handler) return handler(init);
+		if (url === '/picture-frame/device') {
+			return new Response(JSON.stringify(defaultDeviceInfo), { status: 200 });
+		}
+		throw new Error(`Unhandled fetch to ${url}`);
+	});
+	vi.stubGlobal('fetch', fetchStub);
+	return fetchStub;
+}
+
 describe('/picture-frame/+page.svelte', () => {
 	it('pushes a random photo and shows the result on click', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					asset: { id: 'abc', filename: 'sunset.jpg' },
-					device: { width: 1200, height: 1600 },
-					path: '/gallerys/default/abc.jpg'
-				}),
-				{ status: 200 }
-			)
-		);
-		vi.stubGlobal('fetch', fetchStub);
+		const fetchStub = stubFetch({
+			'/picture-frame': () =>
+				new Response(
+					JSON.stringify({
+						asset: { id: 'abc', filename: 'sunset.jpg' },
+						device: { width: 1200, height: 1600 },
+						path: '/gallerys/default/abc.jpg'
+					}),
+					{ status: 200 }
+				)
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -50,23 +78,21 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('optimistically moves the active badge to the pushed asset without reloading page data', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					asset: { id: 'asset-2', filename: 'other.jpg' },
-					device: { width: 1200, height: 1600 },
-					path: '/gallerys/default/asset-2-1700000000000.jpg'
-				}),
-				{ status: 200 }
-			)
-		);
-		vi.stubGlobal('fetch', fetchStub);
+		const fetchStub = stubFetch({
+			'/picture-frame': () =>
+				new Response(
+					JSON.stringify({
+						asset: { id: 'asset-2', filename: 'other.jpg' },
+						device: { width: 1200, height: 1600 },
+						path: '/gallerys/default/asset-2-1700000000000.jpg'
+					}),
+					{ status: 200 }
+				)
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -103,7 +129,7 @@ describe('/picture-frame/+page.svelte', () => {
 		await page.getByRole('button', { name: 'Push selected photo' }).click();
 
 		await expect.element(page.getByText('other.jpg')).toBeInTheDocument();
-		expect(fetchStub).toHaveBeenCalledTimes(1);
+		expect(fetchStub.mock.calls.filter(([url]) => url === '/picture-frame')).toHaveLength(1);
 
 		const badgeButton = page.getByTitle('Currently on frame').element().closest('button');
 		const pushedAssetButton = page.getByAltText('other.jpg').element().closest('button');
@@ -111,11 +137,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('disables "Push random photo" when no album assets have been processed', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -139,20 +165,26 @@ describe('/picture-frame/+page.svelte', () => {
 		await expect.element(page.getByRole('button', { name: 'Push random photo' })).toBeDisabled();
 	});
 
-	it('shows device info when data.device is populated', async () => {
+	it('shows device info once the device fetch resolves', async () => {
+		stubFetch({
+			'/picture-frame/device': () =>
+				new Response(
+					JSON.stringify({
+						width: 1200,
+						height: 1600,
+						name: 'Living Room Frame',
+						version: '1.2.3',
+						type: 'bloomin8',
+						battery: 87,
+						image: '/gallerys/default/asset-1-1700000000000.jpg'
+					}),
+					{ status: 200 }
+				)
+		});
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: {
-					width: 1200,
-					height: 1600,
-					name: 'Living Room Frame',
-					version: '1.2.3',
-					type: 'bloomin8',
-					battery: 87,
-					image: '/gallerys/default/asset-1-1700000000000.jpg'
-				},
-				deviceError: null,
 				album: null,
 				albumError: null
 			}
@@ -164,12 +196,15 @@ describe('/picture-frame/+page.svelte', () => {
 			.toBeInTheDocument();
 	});
 
-	it('shows an inline error when data.deviceError is set', async () => {
+	it('shows an inline error when the device fetch fails', async () => {
+		stubFetch({
+			'/picture-frame/device': () =>
+				new Response('Failed to fetch device info from Bloomin8 frame', { status: 502 })
+		});
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: 'Failed to fetch device info from Bloomin8 frame',
 				album: null,
 				albumError: null
 			}
@@ -181,11 +216,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('renders a thumbnail for each asset when data.album is populated', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -222,11 +257,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('shows a processed indicator only on thumbnails whose asset is processed', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -261,11 +296,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('shows the active badge only on the thumbnail currently on the frame', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -300,11 +335,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('"Push selected photo" stays disabled selecting an unprocessed thumbnail, but highlights it', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -334,11 +369,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('"Push selected photo" becomes enabled once the selected asset is processed', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -368,19 +403,25 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('clicking "Process" on a selected asset opens the crop editor', async () => {
+		stubFetch({
+			'/picture-frame/device': () =>
+				new Response(
+					JSON.stringify({
+						width: 1200,
+						height: 1600,
+						name: 'Frame',
+						version: '1.0',
+						type: 'bloomin8',
+						battery: 90,
+						image: '/gallerys/default/asset-1-1700000000000.jpg'
+					}),
+					{ status: 200 }
+				)
+		});
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: {
-					width: 1200,
-					height: 1600,
-					name: 'Frame',
-					version: '1.0',
-					type: 'bloomin8',
-					battery: 90,
-					image: '/gallerys/default/asset-1-1700000000000.jpg'
-				},
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -402,29 +443,29 @@ describe('/picture-frame/+page.svelte', () => {
 		});
 
 		await page.getByAltText('photo.jpg').click();
-		await page.getByRole('button', { name: 'Process', exact: true }).click();
+		const processButton = page.getByRole('button', { name: 'Process', exact: true });
+		await expect.element(processButton).not.toBeDisabled();
+		await processButton.click();
 
 		await expect.element(page.getByText('Crop photo')).toBeInTheDocument();
 	});
 
 	it('clicking "Push selected photo" POSTs the selected assetId', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					asset: { id: 'asset-1', filename: 'photo.jpg' },
-					device: { width: 1200, height: 1600 },
-					path: '/gallerys/default/asset-1.jpg'
-				}),
-				{ status: 200 }
-			)
-		);
-		vi.stubGlobal('fetch', fetchStub);
+		const fetchStub = stubFetch({
+			'/picture-frame': () =>
+				new Response(
+					JSON.stringify({
+						asset: { id: 'asset-1', filename: 'photo.jpg' },
+						device: { width: 1200, height: 1600 },
+						path: '/gallerys/default/asset-1.jpg'
+					}),
+					{ status: 200 }
+				)
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -456,11 +497,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('disables "Process new photos" when every visible asset is already processed', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -485,14 +526,13 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('clicking "Process new photos" POSTs to process-all and refreshes the data', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
-		vi.stubGlobal('fetch', fetchStub);
+		const fetchStub = stubFetch({
+			'/picture-frame/process-all': () => new Response(JSON.stringify({}), { status: 200 })
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -521,16 +561,14 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('shows an inline error when "Process new photos" fails', async () => {
-		const fetchStub = vi
-			.fn()
-			.mockResolvedValue(new Response('Failed to auto-process album assets', { status: 502 }));
-		vi.stubGlobal('fetch', fetchStub);
+		stubFetch({
+			'/picture-frame/process-all': () =>
+				new Response('Failed to auto-process album assets', { status: 502 })
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: {
 					albumId: 'album-1',
 					albumName: 'Trip',
@@ -557,26 +595,24 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('fetches settings and shows the modal pre-filled with the fetched values on "Schedule pull…"', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					upstream_on: true,
-					upstream_url: 'http://upstream.test',
-					token: 'secret',
-					next_cron_time: 0,
-					pre_image: '/gallerys/default/last.jpg',
-					time: 1700000000
-				}),
-				{ status: 200 }
-			)
-		);
-		vi.stubGlobal('fetch', fetchStub);
+		const fetchStub = stubFetch({
+			'/picture-frame/schedule': () =>
+				new Response(
+					JSON.stringify({
+						upstream_on: true,
+						upstream_url: 'http://upstream.test',
+						token: 'secret',
+						next_cron_time: 0,
+						pre_image: '/gallerys/default/last.jpg',
+						time: 1700000000
+					}),
+					{ status: 200 }
+				)
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: null,
 				albumError: null
 			}
@@ -590,10 +626,10 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('saving in the schedule modal PUTs the edited settings and closes the modal', async () => {
-		const fetchStub = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-			if (!init) {
-				return Promise.resolve(
-					new Response(
+		const fetchStub = stubFetch({
+			'/picture-frame/schedule': (init) => {
+				if (!init) {
+					return new Response(
 						JSON.stringify({
 							upstream_on: true,
 							upstream_url: 'http://upstream.test',
@@ -603,18 +639,15 @@ describe('/picture-frame/+page.svelte', () => {
 							time: 1700000000
 						}),
 						{ status: 200 }
-					)
-				);
+					);
+				}
+				return new Response(JSON.stringify(null), { status: 200 });
 			}
-			return Promise.resolve(new Response(JSON.stringify(null), { status: 200 }));
 		});
-		vi.stubGlobal('fetch', fetchStub);
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: null,
 				albumError: null
 			}
@@ -633,18 +666,16 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('shows an inline error and does not open the modal when fetching settings fails', async () => {
-		const fetchStub = vi.fn().mockResolvedValue(
-			new Response('Failed to fetch upstream pull settings from Bloomin8 frame', {
-				status: 502
-			})
-		);
-		vi.stubGlobal('fetch', fetchStub);
+		stubFetch({
+			'/picture-frame/schedule': () =>
+				new Response('Failed to fetch upstream pull settings from Bloomin8 frame', {
+					status: 502
+				})
+		});
 
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: null,
 				albumError: null
 			}
@@ -659,11 +690,11 @@ describe('/picture-frame/+page.svelte', () => {
 	});
 
 	it('shows data.albumError when data.album is null and albumError is set', async () => {
+		stubFetch();
+
 		render(Page, {
 			data: {
 				isAuthenticated: true,
-				device: null,
-				deviceError: null,
 				album: null,
 				albumError: 'Failed to fetch album from Immich'
 			}
