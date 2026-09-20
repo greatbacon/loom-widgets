@@ -56,11 +56,15 @@ export function computeDefaultCrop(
 }
 
 export function shouldCycleOnPull(now: Date = new Date()): boolean {
-	return now.getHours() === 1;
+	console.log('should we cycle?', now.getHours());
+	//return now.getHours() === 1;
+	return true;
 }
 
 export function computeNextCronTime(now: Date = new Date()): string {
-	const next = new Date(now.getTime() + 60 * 60 * 1000);
+	console.log('next pull time')
+	//const next = new Date(now.getTime() + (60 * 60 * 1000));
+	const next = new Date(now.getTime() + (10 * 60 * 1000));
 	return next.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
