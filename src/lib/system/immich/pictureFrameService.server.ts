@@ -57,8 +57,8 @@ export function computeDefaultCrop(
 
 export function shouldCycleOnPull(now: Date = new Date()): boolean {
 	console.log('should we cycle?', now.getHours());
-	//return now.getHours() === 1;
-	return true;
+	return now.getHours() === 10;
+	//return true;
 }
 
 export function computeNextCronTime(now: Date = new Date()): string {
