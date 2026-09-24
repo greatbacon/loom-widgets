@@ -7,6 +7,3 @@ bun.lockb
 
 # Miscellaneous
 /static/
-
-# Not valid JSON - contains unquoted envsubst placeholders
-docker/keycloak-dev/realm-template.json
