@@ -44,7 +44,7 @@ to get your DB schema up to date.
 1. `docker compose up -d`
 2. Copy `.env.example` to `.env` — the defaults already match the seeded client's secret.
 3. Sign in with the seed account: username `founder`, password `founder` (has the `founder` realm role, used for initial admin testing).
-4. To customize the realm name, client, redirect URIs, or seed user (e.g. for a different `getloom` project), set the corresponding environment variables on the `keycloak` service in `compose.yaml` — see `docker/keycloak-dev/README.md` for the full list.
+4. To customize the realm name, client, redirect URIs, or seed user (e.g. for a different `getloom` project), set the corresponding environment variables on the `keycloak` service in `compose.yaml` — see the [getloom/keycloak-dev-container](https://github.com/getloom/keycloak-dev-container) README for the full list.
 
 
 ## Building
