@@ -90,4 +90,31 @@ describe('YtDlpService.download', () => {
 			code: 502
 		});
 	});
+
+	it('uses audio-extraction args and returns mp3 content type when audioOnly is true', async () => {
+		execFileMock.mockResolvedValue({ stdout: '/tmp/yt-dlp-test/abc/My_Song.mp3\n', stderr: '' });
+		const service = new YtDlpService('/tmp/yt-dlp-test');
+
+		const result = await service.download('https://example.com/watch?v=1', true);
+
+		expect(result).toEqual({
+			ok: true,
+			data: {
+				filePath: '/tmp/yt-dlp-test/abc/My_Song.mp3',
+				filename: 'My_Song.mp3',
+				contentType: 'audio/mpeg'
+			},
+			code: 200
+		});
+		expect(execFileMock).toHaveBeenCalledWith(
+			'yt-dlp',
+			expect.arrayContaining(['-x', '--audio-format', 'mp3', '--audio-quality', '0']),
+			expect.objectContaining({ timeout: expect.any(Number) })
+		);
+		expect(execFileMock).not.toHaveBeenCalledWith(
+			'yt-dlp',
+			expect.arrayContaining(['--merge-output-format']),
+			expect.anything()
+		);
+	});
 });

@@ -6,9 +6,9 @@ import { YtDlpService } from '$lib/system/ytdlp/ytDlpService.server';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const body = (await request.json()) as { url?: string };
+	const body = (await request.json()) as { url?: string; audioOnly?: boolean };
 
-	const result = await new YtDlpService().download(body.url);
+	const result = await new YtDlpService().download(body.url, body.audioOnly);
 
 	if (!result.ok) {
 		error(result.code, result.error);

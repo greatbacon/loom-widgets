@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Button, TextField } from 'svelte-ux';
+	import { Button, Switch, TextField } from 'svelte-ux';
 
 	let url = $state('');
+	let audioOnly = $state(false);
 	let loading = $state(false);
 	let errorMessage = $state<string | null>(null);
 
@@ -18,7 +19,7 @@
 			const response = await fetch('/yt-dlp', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ url })
+				body: JSON.stringify({ url, audioOnly })
 			});
 
 			if (!response.ok) {
@@ -62,6 +63,11 @@
 			Download
 		</Button>
 	</div>
+
+	<label class="flex w-full max-w-md items-center gap-2">
+		<Switch bind:checked={audioOnly} />
+		<span>Audio only (MP3)</span>
+	</label>
 
 	{#if errorMessage}
 		<p class="text-error">{errorMessage}</p>

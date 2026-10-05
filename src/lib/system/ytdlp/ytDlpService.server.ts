@@ -53,7 +53,10 @@ export class YtDlpService {
 		}
 	}
 
-	async download(url: string | undefined): Promise<Result<YtDlpDownloadResult> | Error> {
+	async download(
+		url: string | undefined,
+		audioOnly = false
+	): Promise<Result<YtDlpDownloadResult> | Error> {
 		if (!url || !this.isValidUrl(url)) {
 			return { ok: false, error: 'A valid http(s) url is required', code: 400 };
 		}
@@ -62,6 +65,10 @@ export class YtDlpService {
 		await mkdir(dir, { recursive: true });
 
 		const outputTemplate = path.join(dir, '%(title)s.%(ext)s');
+
+		const formatArgs = audioOnly
+			? ['-x', '--audio-format', 'mp3', '--audio-quality', '0']
+			: ['-S', 'vcodec:h264,acodec:aac,ext:mp4:m4a', '--merge-output-format', 'mp4'];
 
 		let stdout: string;
 		try {
@@ -72,10 +79,7 @@ export class YtDlpService {
 					'--restrict-filenames',
 					'--quiet',
 					'--no-warnings',
-					'-S',
-					'vcodec:h264,acodec:aac,ext:mp4:m4a',
-					'--merge-output-format',
-					'mp4',
+					...formatArgs,
 					'-o',
 					outputTemplate,
 					'--print',
