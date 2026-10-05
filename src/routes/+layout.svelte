@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { mdScreen } from '@layerstack/svelte-stores';
 	import IconMdiImageFrame from '~icons/mdi/image-frame';
+	import IconMdiYoutube from '~icons/mdi/youtube';
 
 	let { data, children } = $props();
 
@@ -23,6 +24,13 @@
 				text="Picture Frame"
 				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
 				icon={IconMdiImageFrame}
+			/>
+			<NavItem
+				currentUrl={page.url}
+				path="/yt-dlp"
+				text="YouTube DL"
+				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
+				icon={IconMdiYoutube}
 			/>
 		</svelte:fragment>
 
