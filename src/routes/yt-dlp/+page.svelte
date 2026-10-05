@@ -38,6 +38,7 @@
 			anchor.click();
 			anchor.remove();
 			URL.revokeObjectURL(blobUrl);
+			url = '';
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'Failed to download video';
 		} finally {
