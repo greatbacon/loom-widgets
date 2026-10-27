@@ -131,4 +131,18 @@ export class TodoItemsService {
 			return { ok: false, error: 'Failed to delete item', code: 500 };
 		}
 	}
+
+	async deleteCompletedItems(listId: string): Promise<Result<null> | Error> {
+		const validListId = parseId(listId, 'listId');
+		if (!validListId.ok) return { ok: false, error: validListId.error, code: 400 };
+
+		try {
+			const deleted = await this.todoItemsRepo.deleteCompleted(validListId.value);
+			if (deleted === undefined) return { ok: false, error: 'List not found', code: 404 };
+			return { ok: true, data: null, code: 204 };
+		} catch (error) {
+			log.error('Error deleting completed todo items:', error);
+			return { ok: false, error: 'Failed to delete completed items', code: 500 };
+		}
+	}
 }

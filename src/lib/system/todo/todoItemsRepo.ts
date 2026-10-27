@@ -130,4 +130,26 @@ export class TodoItemsRepo extends Repo {
 			return true;
 		});
 	}
+
+	async deleteCompleted(listId: string): Promise<number | undefined> {
+		log.debug(`[deleteCompleted] todo items in list ${listId}`);
+		return this.sql.begin(async (sql) => {
+			const list = await sql`SELECT id FROM todo_lists WHERE id = ${listId} FOR UPDATE`;
+			if (list.length === 0) return undefined;
+			const deleted = await sql`
+				DELETE FROM todo_items WHERE list_id = ${listId} AND completed RETURNING id
+			`;
+			if (deleted.length > 0) {
+				await sql`
+					UPDATE todo_items t SET position = r.new_position
+					FROM (
+						SELECT id, (row_number() OVER (ORDER BY position) - 1)::int AS new_position
+						FROM todo_items WHERE list_id = ${listId}
+					) r
+					WHERE t.id = r.id AND t.position != r.new_position
+				`;
+			}
+			return deleted.length;
+		});
+	}
 }

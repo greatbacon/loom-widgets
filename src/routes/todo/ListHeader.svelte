@@ -2,11 +2,13 @@
 	import { Button, TextField } from 'svelte-ux';
 	import IconMdiPencil from '~icons/mdi/pencil';
 	import IconMdiDelete from '~icons/mdi/delete';
+	import IconMdiBroom from '~icons/mdi/broom';
 	import { sendRequest } from './sendRequest';
 
-	let { list }: { list: { id: string; name: string } } = $props();
+	let { list }: { list: { id: string; name: string; items: { completed: boolean }[] } } = $props();
 
 	const url = $derived(`/todo/lists/${list.id}`);
+	const hasCompleted = $derived(list.items.some((item) => item.completed));
 
 	let editing = $state(false);
 	let draft = $state('');
@@ -35,6 +37,15 @@
 		} else {
 			editing = false;
 		}
+		loading = false;
+	}
+
+	async function clearCompleted() {
+		if (loading) return;
+		loading = true;
+		errorMessage = null;
+		const error = await sendRequest(`${url}/items`, 'DELETE');
+		if (error) errorMessage = error;
 		loading = false;
 	}
 
@@ -71,6 +82,13 @@
 	</form>
 {:else}
 	<div class="mb-2 flex items-center gap-2">
+		<Button
+			icon={IconMdiBroom}
+			size="sm"
+			aria-label="Clear completed items"
+			disabled={loading || !hasCompleted}
+			on:click={clearCompleted}
+		/>
 		<h2 class="flex-1 text-lg font-semibold">{list.name}</h2>
 		<Button
 			icon={IconMdiPencil}

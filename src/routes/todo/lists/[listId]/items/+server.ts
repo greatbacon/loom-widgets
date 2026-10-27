@@ -29,3 +29,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	return json(result.data, { status: result.code });
 };
+
+export const DELETE: RequestHandler = async ({ params }) => {
+	const result = await new TodoItemsService().deleteCompletedItems(params.listId);
+
+	if (!result.ok) {
+		error(result.code, result.error);
+	}
+
+	return new Response(null, { status: 204 });
+};
