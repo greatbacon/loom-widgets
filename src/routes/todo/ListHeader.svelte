@@ -5,7 +5,15 @@
 	import IconMdiBroom from '~icons/mdi/broom';
 	import { sendRequest } from './sendRequest';
 
-	let { list }: { list: { id: string; name: string; items: { completed: boolean }[] } } = $props();
+	let {
+		list,
+		open,
+		ontoggle
+	}: {
+		list: { id: string; name: string; items: { completed: boolean }[] };
+		open: boolean;
+		ontoggle: () => void;
+	} = $props();
 
 	const url = $derived(`/todo/lists/${list.id}`);
 	const hasCompleted = $derived(list.items.some((item) => item.completed));
@@ -89,7 +97,17 @@
 			disabled={loading || !hasCompleted}
 			on:click={clearCompleted}
 		/>
-		<h2 class="flex-1 text-lg font-semibold">{list.name}</h2>
+		<h2 class="flex-1 text-lg font-semibold">
+			<button
+				type="button"
+				class="w-full cursor-pointer text-left"
+				aria-expanded={open}
+				aria-controls={`todo-list-${list.id}`}
+				onclick={ontoggle}
+			>
+				{list.name}
+			</button>
+		</h2>
 		<Button
 			icon={IconMdiPencil}
 			size="sm"

@@ -13,9 +13,14 @@ function stubFetch(respond: () => Response | Promise<Response>) {
 	return fetchStub;
 }
 
+const STORAGE_KEY = 'todo-expanded-lists';
+
+const expand = (...ids: string[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
+	localStorage.clear();
 });
 
 const makeItem = (overrides: Partial<TodoItem> = {}): TodoItem => ({
@@ -56,6 +61,7 @@ describe('/todo/+page.svelte', () => {
 			]
 		};
 
+		expand('list-1', 'list-2');
 		render(Page, { data });
 
 		await expect.element(page.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
@@ -76,6 +82,7 @@ describe('/todo/+page.svelte', () => {
 			]
 		};
 
+		expand('list-1');
 		render(Page, { data });
 
 		const checkboxes = page.getByRole('checkbox');
@@ -92,6 +99,7 @@ describe('/todo/+page.svelte', () => {
 	});
 
 	it('shows a message for a list with no items', async () => {
+		expand('list-1');
 		render(Page, { data: { isAuthenticated: true, error: null, lists: [makeList()] } });
 
 		await expect.element(page.getByText('No items.')).toBeInTheDocument();
@@ -140,6 +148,7 @@ describe('/todo/+page.svelte', () => {
 
 	it('adds an item to a list', async () => {
 		const fetchStub = stubFetch(() => new Response('{}', { status: 201 }));
+		expand('list-1');
 		render(Page, { data: { isAuthenticated: true, error: null, lists: [makeList()] } });
 
 		await page.getByLabelText('Add item').fill('milk');
@@ -186,6 +195,7 @@ describe('/todo/+page.svelte', () => {
 	});
 
 	it('keeps item input state separate per list', async () => {
+		expand('list-1', 'list-2');
 		render(Page, {
 			data: {
 				isAuthenticated: true,
@@ -210,6 +220,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('toggles optimistically and sends PATCH', async () => {
 			const fetchStub = stubFetch(() => new Response(null, { status: 200 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('checkbox').click();
@@ -225,6 +236,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('reverts the checkbox and shows the error when toggle fails', async () => {
 			stubFetch(() => new Response('nope', { status: 400 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('checkbox').click();
@@ -236,6 +248,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('reverts the checkbox when fetch rejects', async () => {
 			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('checkbox').click();
@@ -246,6 +259,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('edits an item inline', async () => {
 			const fetchStub = stubFetch(() => new Response(null, { status: 200 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Edit item' }).click();
@@ -263,6 +277,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('cancels editing with Cancel and Escape without fetching', async () => {
 			const fetchStub = stubFetch(() => new Response(null, { status: 200 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Edit item' }).click();
@@ -279,6 +294,7 @@ describe('/todo/+page.svelte', () => {
 		});
 
 		it('disables Save for a blank draft', async () => {
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Edit item' }).click();
@@ -288,6 +304,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('stays in edit mode and shows the error when save fails', async () => {
 			stubFetch(() => new Response('bad content', { status: 400 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Edit item' }).click();
@@ -301,6 +318,7 @@ describe('/todo/+page.svelte', () => {
 
 		it('deletes an item', async () => {
 			const fetchStub = stubFetch(() => new Response(null, { status: 204 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Delete item' }).click();
@@ -314,12 +332,115 @@ describe('/todo/+page.svelte', () => {
 
 		it('shows the error when delete fails', async () => {
 			stubFetch(() => new Response('gone wrong', { status: 500 }));
+			expand('list-1');
 			render(Page, { data: withItem() });
 
 			await page.getByRole('button', { name: 'Delete item' }).click();
 
 			await expect.element(page.getByText('gone wrong')).toBeInTheDocument();
 			expect(invalidateAll).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('collapsing', () => {
+		const twoLists = () => ({
+			isAuthenticated: true,
+			error: null,
+			lists: [
+				makeList({ items: [makeItem()] }),
+				makeList({
+					id: 'list-2',
+					name: 'Chores',
+					items: [makeItem({ id: 'item-2', content: 'dishes' })]
+				})
+			]
+		});
+		const nameButton = (name: string) => page.getByRole('button', { name, exact: true });
+
+		it('is collapsed by default', async () => {
+			render(Page, { data: twoLists() });
+
+			await expect.element(page.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+			await expect.element(page.getByText('milk')).not.toBeInTheDocument();
+			await expect.element(page.getByLabelText('Add item')).not.toBeInTheDocument();
+			await expect.element(nameButton('Groceries')).toHaveAttribute('aria-expanded', 'false');
+		});
+
+		it('shows No items. only when expanded', async () => {
+			render(Page, { data: { isAuthenticated: true, error: null, lists: [makeList()] } });
+			await expect.element(page.getByText('No items.')).not.toBeInTheDocument();
+
+			await nameButton('Groceries').click();
+			await expect.element(page.getByText('No items.')).toBeInTheDocument();
+		});
+
+		it('toggles when the name is clicked and persists the state', async () => {
+			render(Page, { data: twoLists() });
+
+			await nameButton('Groceries').click();
+			await expect.element(page.getByText('milk')).toBeInTheDocument();
+			await expect.element(nameButton('Groceries')).toHaveAttribute('aria-expanded', 'true');
+			expect(localStorage.getItem(STORAGE_KEY)).toBe('["list-1"]');
+			await expect.element(page.getByText('dishes')).not.toBeInTheDocument();
+
+			await nameButton('Groceries').click();
+			await expect.element(page.getByText('milk')).not.toBeInTheDocument();
+			expect(localStorage.getItem(STORAGE_KEY)).toBe('[]');
+		});
+
+		it('restores stored expanded ids after mount', async () => {
+			expand('list-2');
+			render(Page, { data: twoLists() });
+
+			await expect.element(page.getByText('dishes')).toBeInTheDocument();
+			await expect.element(page.getByText('milk')).not.toBeInTheDocument();
+		});
+
+		it('prunes ids of lists that no longer exist', async () => {
+			expand('list-1', 'gone');
+			render(Page, { data: twoLists() });
+
+			await expect.element(page.getByText('milk')).toBeInTheDocument();
+			await vi.waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toBe('["list-1"]'));
+		});
+
+		it('ignores invalid JSON in storage', async () => {
+			localStorage.setItem(STORAGE_KEY, '{nope');
+			render(Page, { data: twoLists() });
+
+			await expect.element(page.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+			await expect.element(page.getByText('milk')).not.toBeInTheDocument();
+		});
+
+		it('keeps header actions working while collapsed', async () => {
+			const fetchStub = stubFetch(() => new Response(null, { status: 204 }));
+			render(Page, {
+				data: {
+					isAuthenticated: true,
+					error: null,
+					lists: [makeList({ items: [makeItem({ completed: true })] })]
+				}
+			});
+
+			await page.getByRole('button', { name: 'Clear completed items' }).click();
+			await vi.waitFor(() =>
+				expect(fetchStub).toHaveBeenCalledWith(
+					'/todo/lists/list-1/items',
+					expect.objectContaining({ method: 'DELETE' })
+				)
+			);
+
+			await page.getByRole('button', { name: 'Rename list' }).click();
+			await expect.element(page.getByLabelText('List name')).toBeInTheDocument();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+
+			await page.getByRole('button', { name: 'Delete list' }).click();
+			await vi.waitFor(() =>
+				expect(fetchStub).toHaveBeenCalledWith(
+					'/todo/lists/list-1',
+					expect.objectContaining({ method: 'DELETE' })
+				)
+			);
 		});
 	});
 
