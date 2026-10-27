@@ -113,6 +113,15 @@ describe('/todo/+page.svelte', () => {
 		await expect.element(page.getByLabelText('New list')).not.toBeInTheDocument();
 	});
 
+	it('refreshes the data when the Refresh button is clicked', async () => {
+		render(Page, { data: { isAuthenticated: true, error: null, lists: [] } });
+		expect(invalidateAll).not.toHaveBeenCalled();
+
+		await page.getByRole('button', { name: 'Refresh' }).click();
+
+		await vi.waitFor(() => expect(invalidateAll).toHaveBeenCalledTimes(1));
+	});
+
 	it('creates a list', async () => {
 		const fetchStub = stubFetch(() => new Response('{}', { status: 201 }));
 		render(Page, { data: { isAuthenticated: true, error: null, lists: [] } });

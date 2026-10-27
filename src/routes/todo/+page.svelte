@@ -1,13 +1,38 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
+	import { Button } from 'svelte-ux';
+	import IconMdiRefresh from '~icons/mdi/refresh';
 	import AddForm from './AddForm.svelte';
 	import ListHeader from './ListHeader.svelte';
 	import TodoItem from './TodoItem.svelte';
 
 	let { data } = $props();
+
+	let refreshing = $state(false);
+
+	async function refresh() {
+		if (refreshing) return;
+		refreshing = true;
+		try {
+			await invalidateAll();
+		} finally {
+			refreshing = false;
+		}
+	}
 </script>
 
 <div class="flex flex-col items-center gap-4 p-6">
-	<h1 class="text-2xl font-bold">Todo</h1>
+	<div class="flex items-center gap-2">
+		<h1 class="text-2xl font-bold">Todo</h1>
+		<Button
+			icon={IconMdiRefresh}
+			size="sm"
+			aria-label="Refresh"
+			loading={refreshing}
+			disabled={refreshing}
+			on:click={refresh}
+		/>
+	</div>
 
 	{#if data.error}
 		<p class="text-error">{data.error}</p>
