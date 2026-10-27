@@ -8,8 +8,7 @@ const { sealCookie, unsealCookie } = await import('./sealedCookie.server');
 
 describe('sealCookie / unsealCookie', () => {
 	it('round-trips a payload', async () => {
-		mockEnv.COOKIE_KEYS =
-			'AAAAAAAAAAAAAAAA__BBBBBBBBBBBBBBBB__CCCCCCCCCCCCCCCC';
+		mockEnv.COOKIE_KEYS = 'AAAAAAAAAAAAAAAA__BBBBBBBBBBBBBBBB__CCCCCCCCCCCCCCCC';
 
 		const sealed = await sealCookie({ sub: 'user-1' }, 60);
 		const result = await unsealCookie<{ sub: string }>(sealed);

@@ -61,8 +61,8 @@ export function shouldCycleOnPull(now: Date = new Date()): boolean {
 }
 
 export function computeNextCronTime(now: Date = new Date()): string {
-	console.log('next pull time')
-	const next = new Date(now.getTime() + (60 * 60 * 1000));
+	console.log('next pull time');
+	const next = new Date(now.getTime() + 60 * 60 * 1000);
 	return next.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
@@ -356,16 +356,16 @@ export class PictureFrameService {
 	}
 
 	async handleEinkPull(now: Date = new Date()): Promise<{ nextCronTime: string }> {
-		console.debug('handling pull request cycle')
+		console.debug('handling pull request cycle');
 		if (shouldCycleOnPull(now)) {
-			console.debug('determined it is time to cycle')
+			console.debug('determined it is time to cycle');
 			const result = await this.cycleActiveAsset();
 			if (!result.ok) {
 				log.error('Eink pull cycle failed:', result.error);
 			}
 		}
 		const nextCronTime = computeNextCronTime(now);
-		console.log('returning ruquest with new pull time: ', nextCronTime)
+		console.log('returning ruquest with new pull time: ', nextCronTime);
 		return { nextCronTime };
 	}
 

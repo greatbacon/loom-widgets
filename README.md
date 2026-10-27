@@ -15,6 +15,7 @@ To test locally with a running Keycloak instance & Postgres DB, use
 ```sh
 docker compose up -d
 ```
+
 Then follow the instructions below for setting up Keycloak sign-in locally
 
 Once you've cloned the project and installed dependencies with `npm install` start a development server:
@@ -29,13 +30,12 @@ npm run dev -- --open
 Make a copy of the .env.example file to have local env variables setup. The defaults should work with the docker-compose stack.
 
 Run
+
 ```sh
 npm run db:migrate
 ```
+
 to get your DB schema up to date.
-
-
-
 
 ### Setting up Keycloak sign-in locally
 
@@ -45,7 +45,6 @@ to get your DB schema up to date.
 2. Copy `.env.example` to `.env` — the defaults already match the seeded client's secret.
 3. Sign in with the seed account: username `founder`, password `founder` (has the `founder` realm role, used for initial admin testing).
 4. To customize the realm name, client, redirect URIs, or seed user (e.g. for a different `getloom` project), set the corresponding environment variables on the `keycloak` service in `compose.yaml` — see the [getloom/keycloak-dev-container](https://github.com/getloom/keycloak-dev-container) README for the full list.
-
 
 ## Building
 
