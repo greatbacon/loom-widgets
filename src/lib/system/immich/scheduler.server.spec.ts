@@ -36,7 +36,8 @@ const cronConstructor = vi.hoisted(() => vi.fn());
 vi.mock('croner', () => ({
 	Cron: vi.fn().mockImplementation(function Cron(...args: unknown[]) {
 		cronConstructor(...args);
-	})
+	}),
+	scheduledJobs: [] as { name?: string; stop: () => void }[]
 }));
 
 const { runNightlyPictureFrameBatch, startNightlyPictureFrameScheduler } = await import(
