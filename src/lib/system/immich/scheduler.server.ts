@@ -1,4 +1,4 @@
-import { Cron } from 'croner';
+import { Cron, scheduledJobs } from 'croner';
 import postgres from 'postgres';
 import { defaultPostgresOptions } from '$lib/db/postgres.server';
 import { PictureFrameService } from './pictureFrameService.server';
@@ -25,11 +25,16 @@ export async function runNightlyPictureFrameBatch(): Promise<void> {
 	}
 }
 
+const JOB_NAME = 'picture-frame-nightly-batch';
+
 export function startNightlyPictureFrameScheduler(): void {
+	// Dev HMR re-runs init() with croner's global registry intact, so drop any previous job.
+	scheduledJobs.find((job) => job.name === JOB_NAME)?.stop();
+
 	new Cron(
 		'0 0 * * *',
 		{
-			name: 'picture-frame-nightly-batch',
+			name: JOB_NAME,
 			protect: true,
 			catch: (error) =>
 				log.error('Nightly picture-frame batch job threw an unhandled error:', error)

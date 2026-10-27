@@ -1,4 +1,4 @@
-import type {Sql, Options} from 'postgres';
+import type { Sql, Options } from 'postgres';
 import { env } from '$env/dynamic/private';
 
 // Postgres.js - PostgreSQL client for Node.js
@@ -22,7 +22,7 @@ const toDefaultPostgresOptions = (): PostgresOptions => ({
 	username: env.PGUSER,
 	password: env.PGPASSWORD,
 	idle_timeout: Number(env.PGIDLE_TIMEOUT) || undefined,
-	connect_timeout: Number(env.PGCONNECT_TIMEOUT) || undefined,
+	connect_timeout: Number(env.PGCONNECT_TIMEOUT) || undefined
 });
 
 export const defaultPostgresOptions = toDefaultPostgresOptions();

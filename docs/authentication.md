@@ -1,9 +1,11 @@
 # Authentication
 
 ## Local Solution
+
 Loom relies on a local Postgresql DB with an accounts table for initially managing accounts
 
 You can
+
 - Sign up for an account via the /signup route
 - Sign in to existing accounts via the /signin route
 
@@ -20,9 +22,9 @@ Ideally it will be compatible with any OAuth2/OIDC provider, but we're starting 
 The Keycloak flow is a server-side OIDC Authorization Code + PKCE exchange, handled entirely in `src/hooks.server.ts` and `src/routes/auth/`:
 
 - `/auth/keycloak/login` starts the flow
-- `/auth/keycloak/callback` exchanges the authorization code for tokens, then sets a `kc_session` cookie 
-- `/auth/logout` clears both the local `session_id` cookie and the `kc_session` cookie; 
-- `hooks.server.ts` authenticates a request if *either* a valid local `session_id` cookie *or* a valid, non-expired `kc_session` cookie is present.
+- `/auth/keycloak/callback` exchanges the authorization code for tokens, then sets a `kc_session` cookie
+- `/auth/logout` clears both the local `session_id` cookie and the `kc_session` cookie;
+- `hooks.server.ts` authenticates a request if _either_ a valid local `session_id` cookie _or_ a valid, non-expired `kc_session` cookie is present.
 
 ### Configuration
 

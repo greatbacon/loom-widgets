@@ -1,14 +1,14 @@
 import postgres from 'postgres';
-import {postgresOptions} from './migrate.ts'
+import { postgresOptions } from './migrate.ts';
 
-export async function destroy(){
-    console.log("Running destroy")
-    console.log("confirming options")
-    console.log(postgresOptions);
+export async function destroy() {
+	console.log('Running destroy');
+	console.log('confirming options');
+	console.log(postgresOptions);
 
-    const db = postgres(postgresOptions)
+	const db = postgres(postgresOptions);
 
-    await db.unsafe(`
+	await db.unsafe(`
             drop schema public cascade;
             create schema public;
             alter schema public owner to postgres;
@@ -17,6 +17,5 @@ export async function destroy(){
             grant all on schema public to public;
         `);
 
-    await db.end();
-
+	await db.end();
 }

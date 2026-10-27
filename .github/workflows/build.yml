@@ -45,6 +45,6 @@ jobs:
       #     POSTGRES_DB: loom
       #     POSTGRES_PASSWORD: password
       #     PGUSER: postgres
-      - run: npx playwright install 
+      - run: npx playwright install
       - run: npm run test
       - run: npm run build
