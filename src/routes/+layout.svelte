@@ -5,6 +5,7 @@
 	import { mdScreen } from '@layerstack/svelte-stores';
 	import IconMdiImageFrame from '~icons/mdi/image-frame';
 	import IconMdiYoutube from '~icons/mdi/youtube';
+	import IconMdiCheckboxMarkedOutline from '~icons/mdi/checkbox-marked-outline';
 
 	let { data, children } = $props();
 
@@ -31,6 +32,13 @@
 				text="YouTube DL"
 				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
 				icon={IconMdiYoutube}
+			/>
+			<NavItem
+				currentUrl={page.url}
+				path="/todo"
+				text="Todo"
+				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
+				icon={IconMdiCheckboxMarkedOutline}
 			/>
 		</svelte:fragment>
 

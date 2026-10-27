@@ -14,6 +14,15 @@ export class TodoItemsRepo extends Repo {
 		`;
 	}
 
+	async findAll(): Promise<TodoItem[]> {
+		log.debug('[findAll] todo items');
+		return this.sql<TodoItem[]>`
+			SELECT id, list_id, author_sub, content, position, completed, created_at, updated_at
+			FROM todo_items
+			ORDER BY list_id, position
+		`;
+	}
+
 	async findById(listId: string, itemId: string): Promise<TodoItem | undefined> {
 		log.debug(`[findById] todo item ${itemId} in list ${listId}`);
 		const data = await this.sql<TodoItem[]>`

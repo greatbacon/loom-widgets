@@ -1,4 +1,4 @@
-import type { TodoList, TodoListWithItems } from './todo';
+import type { TodoItem, TodoList, TodoListWithItems } from './todo';
 import { TodoListsRepo } from '$lib/system/todo/todoListsRepo';
 import { TodoItemsRepo } from '$lib/system/todo/todoItemsRepo';
 import { parseId, parsePosition, parseText } from '$lib/system/todo/validation';
@@ -40,6 +40,26 @@ export class TodoListsService {
 			return { ok: true, data: lists, code: 200 };
 		} catch (error) {
 			log.error('Error listing todo lists:', error);
+			return { ok: false, error: 'Failed to list lists', code: 500 };
+		}
+	}
+
+	async listListsWithItems(): Promise<Result<TodoListWithItems[]> | Error> {
+		try {
+			const [lists, items] = await Promise.all([
+				this.todoListsRepo.findAll(),
+				this.todoItemsRepo.findAll()
+			]);
+			const itemsByList = new Map<string, TodoItem[]>();
+			for (const item of items) {
+				const listItems = itemsByList.get(item.list_id);
+				if (listItems) listItems.push(item);
+				else itemsByList.set(item.list_id, [item]);
+			}
+			const data = lists.map((list) => ({ ...list, items: itemsByList.get(list.id) ?? [] }));
+			return { ok: true, data, code: 200 };
+		} catch (error) {
+			log.error('Error listing todo lists with items:', error);
 			return { ok: false, error: 'Failed to list lists', code: 500 };
 		}
 	}

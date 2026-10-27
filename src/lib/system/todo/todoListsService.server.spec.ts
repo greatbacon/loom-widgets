@@ -31,7 +31,7 @@ const makeItem = (overrides: Partial<TodoItem> = {}): TodoItem => ({
 
 describe('TodoListsService', () => {
 	let listsRepo: Record<'findAll' | 'findById' | 'create' | 'update' | 'delete', sinon.SinonStub>;
-	let itemsRepo: { findByList: sinon.SinonStub };
+	let itemsRepo: Record<'findAll' | 'findByList', sinon.SinonStub>;
 	let service: TodoListsService;
 
 	beforeEach(() => {
@@ -42,7 +42,7 @@ describe('TodoListsService', () => {
 			update: sinon.stub(),
 			delete: sinon.stub()
 		};
-		itemsRepo = { findByList: sinon.stub() };
+		itemsRepo = { findAll: sinon.stub(), findByList: sinon.stub() };
 		service = new TodoListsService(
 			listsRepo as unknown as TodoListsRepo,
 			itemsRepo as unknown as TodoItemsRepo
@@ -61,6 +61,63 @@ describe('TodoListsService', () => {
 			listsRepo.findAll.rejects(new Error('select * from secrets'));
 
 			expect(await service.listLists()).toEqual({
+				ok: false,
+				error: 'Failed to list lists',
+				code: 500
+			});
+		});
+	});
+
+	describe('listListsWithItems', () => {
+		const OTHER_LIST_ID = '323e4567-e89b-12d3-a456-426614174000';
+
+		it('groups items under their list in repo order', async () => {
+			const listA = makeList();
+			const listB = makeList({ id: OTHER_LIST_ID, name: 'Chores', position: 1 });
+			const a0 = makeItem({ id: 'a0', position: 0 });
+			const b0 = makeItem({ id: 'b0', list_id: OTHER_LIST_ID, position: 0 });
+			const a1 = makeItem({ id: 'a1', position: 1 });
+			listsRepo.findAll.resolves([listA, listB]);
+			itemsRepo.findAll.resolves([a0, a1, b0]);
+
+			expect(await service.listListsWithItems()).toEqual({
+				ok: true,
+				data: [
+					{ ...listA, items: [a0, a1] },
+					{ ...listB, items: [b0] }
+				],
+				code: 200
+			});
+		});
+
+		it('gives a list with no items an empty array', async () => {
+			const list = makeList();
+			listsRepo.findAll.resolves([list]);
+			itemsRepo.findAll.resolves([]);
+
+			expect(await service.listListsWithItems()).toEqual({
+				ok: true,
+				data: [{ ...list, items: [] }],
+				code: 200
+			});
+		});
+
+		it('preserves list order', async () => {
+			const first = makeList({ id: OTHER_LIST_ID, name: 'First', position: 0 });
+			const second = makeList({ name: 'Second', position: 1 });
+			listsRepo.findAll.resolves([first, second]);
+			itemsRepo.findAll.resolves([]);
+
+			const result = await service.listListsWithItems();
+
+			expect(result.ok && result.data.map((l) => l.name)).toEqual(['First', 'Second']);
+		});
+
+		it('maps repo failure to 500', async () => {
+			listsRepo.findAll.resolves([]);
+			itemsRepo.findAll.rejects(new Error('boom'));
+
+			expect(await service.listListsWithItems()).toEqual({
 				ok: false,
 				error: 'Failed to list lists',
 				code: 500
