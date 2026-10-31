@@ -1,6 +1,6 @@
 import { MediaWikiError, destWikiClient, sourceWikiClient } from './mediaWikiClient.server';
 import type { MediaWikiClient } from './mediaWikiClient.server';
-import type { WikiArticle } from './wiki';
+import type { WikiArticle, WikiCategory } from './wiki';
 
 const log = console;
 
@@ -36,7 +36,7 @@ export class WikiMigrateService {
 		}
 	}
 
-	async listCategories(): Promise<Result<string[]> | Error> {
+	async listCategories(): Promise<Result<WikiCategory[]> | Error> {
 		try {
 			return { ok: true, data: await this.dest.listCategories(), code: 200 };
 		} catch (err) {

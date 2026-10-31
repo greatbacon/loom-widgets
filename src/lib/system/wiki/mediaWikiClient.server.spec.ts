@@ -96,23 +96,66 @@ describe('MediaWikiClient', () => {
 	});
 
 	describe('listCategories', () => {
-		it('follows continue across pages and strips the Category: prefix', async () => {
+		it('queries categories with parents, merges across batches and strips the prefix', async () => {
 			const fetchStub = vi
 				.fn()
 				.mockResolvedValueOnce(
 					json({
-						continue: { accontinue: 'Bar', continue: '-||' },
-						query: { allcategories: [{ category: 'Category:Foo' }, { category: 'Baz' }] }
+						continue: { clcontinue: '1|Foo|Bar', continue: '||' },
+						query: {
+							pages: [
+								{ title: 'Category:Foo', categories: [{ title: 'Category:Bar' }] },
+								{ title: 'Category:Baz' }
+							]
+						}
 					})
 				)
-				.mockResolvedValueOnce(json({ query: { allcategories: [{ category: 'Category:Qux' }] } }));
+				.mockResolvedValueOnce(
+					json({
+						query: {
+							pages: [{ title: 'Category:Foo', categories: [{ title: 'Category:Qux' }] }]
+						}
+					})
+				);
 			vi.stubGlobal('fetch', fetchStub);
 
 			const result = await new MediaWikiClient(API).listCategories();
 
-			expect(result).toEqual(['Foo', 'Baz', 'Qux']);
+			expect(result).toEqual([
+				{ name: 'Foo', parents: ['Bar', 'Qux'] },
+				{ name: 'Baz', parents: [] }
+			]);
 			expect(fetchStub).toHaveBeenCalledTimes(2);
-			expect(urlOf(fetchStub, 1).searchParams.get('accontinue')).toBe('Bar');
+			const first = urlOf(fetchStub, 0);
+			expect(first.searchParams.get('generator')).toBe('allcategories');
+			expect(first.searchParams.get('prop')).toBe('categories|info');
+			expect(urlOf(fetchStub, 1).searchParams.get('clcontinue')).toBe('1|Foo|Bar');
+		});
+	});
+
+	describe('listCategories redirects', () => {
+		it('excludes redirect categories and removes them from parents', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue(
+					json({
+						query: {
+							pages: [
+								{ title: 'Category:Old', redirect: true, categories: [{ title: 'Category:Root' }] },
+								{ title: 'Category:Root' },
+								{ title: 'Category:Kid', categories: [{ title: 'Category:Old' }] }
+							]
+						}
+					})
+				)
+			);
+
+			const result = await new MediaWikiClient(API).listCategories();
+
+			expect(result).toEqual([
+				{ name: 'Root', parents: [] },
+				{ name: 'Kid', parents: [] }
+			]);
 		});
 	});
 
@@ -273,7 +316,7 @@ describe('MediaWikiClient', () => {
 
 	describe('extra headers', () => {
 		it('sends configured headers on every request', async () => {
-			const fetchStub = vi.fn().mockResolvedValue(json({ query: { allcategories: [] } }));
+			const fetchStub = vi.fn().mockResolvedValue(json({ query: { pages: [] } }));
 			vi.stubGlobal('fetch', fetchStub);
 
 			await new MediaWikiClient(API, undefined, undefined, {
@@ -289,7 +332,7 @@ describe('MediaWikiClient', () => {
 				.fn()
 				.mockResolvedValueOnce(loginResponses()[0])
 				.mockResolvedValueOnce(loginResponses()[1])
-				.mockResolvedValueOnce(json({ query: { allcategories: [] } }));
+				.mockResolvedValueOnce(json({ query: { pages: [] } }));
 			vi.stubGlobal('fetch', fetchStub);
 
 			await new MediaWikiClient(API, 'bot', 'pw', {}, '_oauth2_proxy=xyz').listCategories();

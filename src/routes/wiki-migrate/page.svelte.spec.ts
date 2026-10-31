@@ -30,7 +30,11 @@ afterEach(() => {
 
 const data = {
 	isAuthenticated: true,
-	categories: ['Fruit', 'Veg'],
+	categories: [
+		{ name: 'Fruit', parents: [] },
+		{ name: 'Veg', parents: [] },
+		{ name: 'Apple', parents: ['Fruit'] }
+	],
 	categoriesError: null as string | null
 };
 
@@ -85,7 +89,7 @@ describe('/wiki-migrate/+page.svelte', () => {
 		const upload = page.getByRole('button', { name: 'Upload with category' });
 		await expect.element(upload).toBeDisabled();
 
-		await page.getByLabelText('Destination category').selectOptions('Fruit');
+		await page.getByRole('button', { name: 'Veg', exact: true }).click();
 
 		await expect.element(upload).toBeEnabled();
 	});
@@ -97,17 +101,34 @@ describe('/wiki-migrate/+page.svelte', () => {
 		render(Page, { data });
 		await page.getByRole('button', { name: 'Start' }).click();
 
-		await page.getByLabelText('Destination category').selectOptions('Fruit');
+		await page.getByRole('button', { name: 'Veg', exact: true }).click();
 		await page.getByRole('button', { name: 'Upload with category' }).click();
 
 		await expect.element(page.getByRole('heading', { name: 'Banana' })).toBeInTheDocument();
 		const uploadCall = fetchStub.mock.calls.find(([url]) => url === '/wiki-migrate/upload');
 		expect(JSON.parse(uploadCall![1]!.body as string)).toEqual({
 			title: 'Apple',
-			category: 'Fruit'
+			category: 'Veg'
 		});
 		await expect.element(page.getByText('Uploaded: 1')).toBeInTheDocument();
-		await expect.element(page.getByLabelText('Destination category')).toHaveValue('');
+		await expect.element(page.getByText('No category selected')).toBeInTheDocument();
+	});
+
+	it('uploads the leaf reached by drilling down', async () => {
+		const fetchStub = stubFetch(articleHandler({ '': article('Apple pie', null) }));
+		render(Page, { data });
+		await page.getByRole('button', { name: 'Start' }).click();
+
+		await page.getByRole('button', { name: 'Fruit', exact: false }).first().click();
+		await page.getByRole('button', { name: 'Apple', exact: true }).click();
+		await page.getByRole('button', { name: 'Upload with category' }).click();
+
+		await expect.element(page.getByText('end of list reached!')).toBeInTheDocument();
+		const uploadCall = fetchStub.mock.calls.find(([url]) => url === '/wiki-migrate/upload');
+		expect(JSON.parse(uploadCall![1]!.body as string)).toEqual({
+			title: 'Apple pie',
+			category: 'Apple'
+		});
 	});
 
 	it('skips to the next article without calling upload', async () => {
@@ -137,7 +158,7 @@ describe('/wiki-migrate/+page.svelte', () => {
 		render(Page, { data });
 		await page.getByRole('button', { name: 'Start' }).click();
 
-		await page.getByLabelText('Destination category').selectOptions('Fruit');
+		await page.getByRole('button', { name: 'Veg', exact: true }).click();
 		await page.getByRole('button', { name: 'Upload with category' }).click();
 
 		await expect
@@ -192,7 +213,7 @@ describe('/wiki-migrate/+page.svelte', () => {
 		render(Page, { data });
 		await page.getByRole('button', { name: 'Start' }).click();
 
-		await page.getByLabelText('Destination category').selectOptions('Fruit');
+		await page.getByRole('button', { name: 'Veg', exact: true }).click();
 		await page.getByRole('button', { name: 'Upload with category' }).click();
 
 		await expect.element(page.getByRole('heading', { name: 'Banana' })).toBeInTheDocument();

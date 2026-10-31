@@ -4,6 +4,7 @@
 	import { replaceState } from '$app/navigation';
 	import { Button, TextField } from 'svelte-ux';
 	import type { WikiArticle } from '$lib/system/wiki/wiki';
+	import CategoryPicker from './CategoryPicker.svelte';
 
 	let { data } = $props();
 
@@ -22,6 +23,8 @@
 		const url = new URL(page.url);
 		if (value === '') url.searchParams.delete('from');
 		else url.searchParams.set('from', value);
+		// url derives from page.url, so it already includes any base path
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		replaceState(url, page.state);
 	}
 
@@ -152,18 +155,11 @@
 			<pre
 				class="max-h-96 overflow-auto rounded border border-surface-content/20 p-2 text-sm whitespace-pre-wrap">{current.text}</pre>
 
+			{#key current.title}
+				<CategoryPicker categories={data.categories} bind:value={category} disabled={loading} />
+			{/key}
+
 			<div class="flex flex-wrap items-center gap-2">
-				<select
-					aria-label="Destination category"
-					class="rounded border border-surface-content/30 bg-surface-100 px-2 py-2"
-					bind:value={category}
-					disabled={loading}
-				>
-					<option value="">Select a category…</option>
-					{#each data.categories as name (name)}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
 				<Button
 					variant="fill"
 					color="primary"

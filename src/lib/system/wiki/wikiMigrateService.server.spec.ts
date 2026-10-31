@@ -58,9 +58,13 @@ describe('WikiMigrateService', () => {
 
 	describe('listCategories', () => {
 		it('returns destination categories', async () => {
-			dest.listCategories.mockResolvedValue(['Foo']);
+			dest.listCategories.mockResolvedValue([{ name: 'Foo', parents: [] }]);
 
-			expect(await service().listCategories()).toEqual({ ok: true, data: ['Foo'], code: 200 });
+			expect(await service().listCategories()).toEqual({
+				ok: true,
+				data: [{ name: 'Foo', parents: [] }],
+				code: 200
+			});
 		});
 
 		it('maps upstream errors to 502', async () => {

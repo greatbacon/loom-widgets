@@ -14,11 +14,21 @@ describe('GET /wiki-migrate/categories', () => {
 	beforeEach(() => listCategories.mockReset());
 
 	it('returns the categories', async () => {
-		listCategories.mockResolvedValue({ ok: true, data: ['Foo', 'Bar'], code: 200 });
+		listCategories.mockResolvedValue({
+			ok: true,
+			data: [
+				{ name: 'Foo', parents: [] },
+				{ name: 'Bar', parents: ['Foo'] }
+			],
+			code: 200
+		});
 
 		const response = await GET({} as Parameters<typeof GET>[0]);
 
-		expect(await response.json()).toEqual(['Foo', 'Bar']);
+		expect(await response.json()).toEqual([
+			{ name: 'Foo', parents: [] },
+			{ name: 'Bar', parents: ['Foo'] }
+		]);
 	});
 
 	it('throws a SvelteKit error on failure', async () => {

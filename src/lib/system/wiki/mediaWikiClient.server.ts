@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import type { WikiArticle } from './wiki';
+import type { WikiArticle, WikiCategory } from './wiki';
 
 export class MediaWikiError extends Error {
 	constructor(
@@ -18,8 +18,10 @@ interface ApiResponse {
 	continue?: Params;
 	query?: {
 		allpages?: { title: string }[];
-		allcategories?: { category: string }[];
 		pages?: {
+			title?: string;
+			categories?: { title: string }[];
+			redirect?: boolean;
 			missing?: boolean;
 			revisions?: { slots?: { main?: { content?: string } } }[];
 		}[];
@@ -87,23 +89,37 @@ export class MediaWikiClient {
 		return content;
 	}
 
-	async listCategories(): Promise<string[]> {
-		const names: string[] = [];
+	async listCategories(): Promise<WikiCategory[]> {
+		const byName = new Map<string, Set<string>>();
+		const redirects = new Set<string>();
+		const strip = (title: string) => title.replace(/^Category:/, '');
 		let cont: Params | undefined;
 		do {
 			const params: Params = {
 				action: 'query',
-				list: 'allcategories',
-				aclimit: 'max',
+				generator: 'allcategories',
+				gaclimit: 'max',
+				prop: 'categories|info',
+				cllimit: 'max',
 				...cont
 			};
 			const body = await this.withRelogin(() => this.request(params));
-			for (const category of body.query?.allcategories ?? []) {
-				names.push(category.category.replace(/^Category:/, ''));
+			for (const page of body.query?.pages ?? []) {
+				if (!page.title) continue;
+				const name = strip(page.title);
+				if (page.redirect) redirects.add(name);
+				const parents = byName.get(name) ?? new Set<string>();
+				for (const parent of page.categories ?? []) parents.add(strip(parent.title));
+				byName.set(name, parents);
 			}
 			cont = body.continue;
 		} while (cont);
-		return names;
+		return [...byName]
+			.filter(([name]) => !redirects.has(name))
+			.map(([name, parents]) => ({
+				name,
+				parents: [...parents].filter((parent) => !redirects.has(parent))
+			}));
 	}
 
 	async createPage(title: string, text: string): Promise<void> {
