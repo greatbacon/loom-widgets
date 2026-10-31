@@ -6,6 +6,7 @@
 	import IconMdiImageFrame from '~icons/mdi/image-frame';
 	import IconMdiYoutube from '~icons/mdi/youtube';
 	import IconMdiCheckboxMarkedOutline from '~icons/mdi/checkbox-marked-outline';
+	import IconMdiWikipedia from '~icons/mdi/wikipedia';
 
 	let { data, children } = $props();
 
@@ -39,6 +40,13 @@
 				text="Todo"
 				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
 				icon={IconMdiCheckboxMarkedOutline}
+			/>
+			<NavItem
+				currentUrl={page.url}
+				path="/wiki-migrate"
+				text="Wiki Migrate"
+				class="mt-2 justify-start pl-[2em] font-bold transition-shadow duration-200 hover:shadow-[0_0_10px_var(--color-primary)]"
+				icon={IconMdiWikipedia}
 			/>
 		</svelte:fragment>
 
