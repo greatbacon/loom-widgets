@@ -89,6 +89,23 @@ describe('WikiMigrateService', () => {
 			expect(dest.createPage).toHaveBeenCalledWith('Apple', 'body text\n\n[[Category:Fruit]]\n');
 		});
 
+		it('uploads edited text instead of fetching the source', async () => {
+			dest.createPage.mockResolvedValue(undefined);
+
+			const result = await service().uploadArticle('Apple', 'Fruit', 'my edit\n');
+
+			expect(result).toMatchObject({ ok: true });
+			expect(source.getPageText).not.toHaveBeenCalled();
+			expect(dest.createPage).toHaveBeenCalledWith('Apple', 'my edit\n\n[[Category:Fruit]]\n');
+		});
+
+		it('returns 400 for blank edited text', async () => {
+			const result = await service().uploadArticle('Apple', 'Fruit', '  ');
+
+			expect(result).toMatchObject({ ok: false, code: 400 });
+			expect(dest.createPage).not.toHaveBeenCalled();
+		});
+
 		it.each([
 			[undefined, 'Fruit'],
 			['  ', 'Fruit'],

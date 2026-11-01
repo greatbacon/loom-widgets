@@ -23,8 +23,16 @@ describe('POST /wiki-migrate/upload', () => {
 
 		const response = await POST(requestWith(JSON.stringify({ title: 'Apple', category: 'Fruit' })));
 
-		expect(uploadArticle).toHaveBeenCalledWith('Apple', 'Fruit');
+		expect(uploadArticle).toHaveBeenCalledWith('Apple', 'Fruit', undefined);
 		expect(await response.json()).toEqual({ title: 'Apple' });
+	});
+
+	it('passes edited text through', async () => {
+		uploadArticle.mockResolvedValue({ ok: true, data: { title: 'Apple' }, code: 200 });
+
+		await POST(requestWith(JSON.stringify({ title: 'Apple', category: 'Fruit', text: 'edited' })));
+
+		expect(uploadArticle).toHaveBeenCalledWith('Apple', 'Fruit', 'edited');
 	});
 
 	it('passes undefined for non-string fields', async () => {
@@ -33,7 +41,7 @@ describe('POST /wiki-migrate/upload', () => {
 		await expect(POST(requestWith(JSON.stringify({ title: 5 })))).rejects.toMatchObject({
 			status: 400
 		});
-		expect(uploadArticle).toHaveBeenCalledWith(undefined, undefined);
+		expect(uploadArticle).toHaveBeenCalledWith(undefined, undefined, undefined);
 	});
 
 	it('returns 400 for invalid JSON', async () => {

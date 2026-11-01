@@ -8,7 +8,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const result = await new WikiMigrateService().uploadArticle(
 		typeof body.title === 'string' ? body.title : undefined,
-		typeof body.category === 'string' ? body.category : undefined
+		typeof body.category === 'string' ? body.category : undefined,
+		typeof body.text === 'string' ? body.text : undefined
 	);
 
 	if (!result.ok) {

@@ -11,6 +11,7 @@
 	let startFrom = $state(page.url.searchParams.get('from') ?? '');
 	let current = $state<WikiArticle | null>(null);
 	let category = $state('');
+	let editedText = $state('');
 	let loading = $state(false);
 	let done = $state(false);
 	let errorMessage = $state<string | null>(null);
@@ -55,6 +56,7 @@
 				setCursor('');
 			} else {
 				current = article;
+				editedText = article.text;
 				done = false;
 				setCursor(article.title);
 			}
@@ -115,7 +117,11 @@
 			const response = await fetch('/wiki-migrate/upload', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ title: current.title, category })
+				body: JSON.stringify({
+					title: current.title,
+					category,
+					...(editedText !== current.text ? { text: editedText } : {})
+				})
 			});
 			if (!response.ok) {
 				errorMessage = await readError(response);
@@ -152,8 +158,12 @@
 	{#if current}
 		<section class="flex flex-col gap-3">
 			<h2 class="text-lg font-semibold">{current.title}</h2>
-			<pre
-				class="max-h-96 overflow-auto rounded border border-surface-content/20 p-2 text-sm whitespace-pre-wrap">{current.text}</pre>
+			<textarea
+				aria-label="Article text"
+				class="h-96 w-full rounded border border-surface-content/20 bg-surface-100 p-2 font-mono text-sm"
+				bind:value={editedText}
+				disabled={loading}
+			></textarea>
 
 			{#key current.title}
 				<CategoryPicker categories={data.categories} bind:value={category} disabled={loading} />

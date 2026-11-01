@@ -46,7 +46,8 @@ export class WikiMigrateService {
 
 	async uploadArticle(
 		title: string | undefined,
-		category: string | undefined
+		category: string | undefined,
+		text?: string
 	): Promise<Result<{ title: string }> | Error> {
 		if (!title || !title.trim()) {
 			return { ok: false, error: 'Title is required', code: 400 };
@@ -57,13 +58,16 @@ export class WikiMigrateService {
 		if (title.length > MAX_LENGTH || category.length > MAX_LENGTH) {
 			return { ok: false, error: 'Title or category is too long', code: 400 };
 		}
+		if (text !== undefined && !text.trim()) {
+			return { ok: false, error: 'Text must not be empty', code: 400 };
+		}
 		if (INVALID_CATEGORY_CHARS.test(category)) {
 			return { ok: false, error: 'Category contains invalid characters', code: 400 };
 		}
 
 		try {
-			const text = await this.source.getPageText(title);
-			await this.dest.createPage(title, `${text.trimEnd()}\n\n[[Category:${category}]]\n`);
+			const body = text ?? (await this.source.getPageText(title));
+			await this.dest.createPage(title, `${body.trimEnd()}\n\n[[Category:${category}]]\n`);
 			return { ok: true, data: { title }, code: 200 };
 		} catch (err) {
 			if (err instanceof MediaWikiError) {
