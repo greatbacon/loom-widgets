@@ -1,7 +1,8 @@
 import type { TodoItem, TodoList, TodoListWithItems } from './todo';
 import { TodoListsRepo } from '$lib/system/todo/todoListsRepo';
 import { TodoItemsRepo } from '$lib/system/todo/todoItemsRepo';
-import { parseId, parsePosition, parseText } from '$lib/system/todo/validation';
+import { parseId, parseText } from '$lib/system/util/validation';
+import { parsePosition } from '$lib/system/todo/validation';
 import postgres from 'postgres';
 import { defaultPostgresOptions } from '$lib/db/postgres.server';
 
