@@ -2,7 +2,7 @@ import { invalidateAll } from '$app/navigation';
 
 export async function sendRequest(
 	url: string,
-	method: 'PATCH' | 'DELETE',
+	method: 'POST' | 'PATCH' | 'DELETE',
 	body?: Record<string, unknown>
 ): Promise<string | null> {
 	try {

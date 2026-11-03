@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { TodoItemsService } from '$lib/system/todo/todoItemsService.server';
-import { readJsonBody } from '$lib/system/todo/readJsonBody';
+import { readJsonBody } from '$lib/system/util/readJsonBody';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) => {

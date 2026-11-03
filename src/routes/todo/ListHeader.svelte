@@ -3,7 +3,7 @@
 	import IconMdiPencil from '~icons/mdi/pencil';
 	import IconMdiDelete from '~icons/mdi/delete';
 	import IconMdiBroom from '~icons/mdi/broom';
-	import { sendRequest } from './sendRequest';
+	import { sendRequest } from '$lib/sendRequest';
 
 	let {
 		list,
