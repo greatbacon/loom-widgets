@@ -3,7 +3,7 @@
 	import IconMdiPencil from '~icons/mdi/pencil';
 	import IconMdiDelete from '~icons/mdi/delete';
 	import type { TodoItem } from '$lib/system/todo/todo';
-	import { sendRequest } from './sendRequest';
+	import { sendRequest } from '$lib/sendRequest';
 
 	let { item, listId }: { item: TodoItem; listId: string } = $props();
 
